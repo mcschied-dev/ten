@@ -11,7 +11,7 @@ const SCREEN_WIDTH: f32 = 1024.0;
 const SCREEN_HEIGHT: f32 = 768.0;
 const PLAYER_SPEED: f32 = 300.0;
 const BULLET_SPEED: f32 = 700.0;
-const INITIAL_ENEMY_SPEED: f32 = 100.0;
+const INITIAL_ENEMY_SPEED: f32 = 150.0;
 const DEFENDER_LINE: f32 = 100.0;
 const TEXT_SCROLL_SPEED: f32 = 100.0;
 
@@ -116,7 +116,7 @@ impl MainState {
 
     fn generate_enemies(wave: u32) -> Vec<Enemy> {
         let mut enemies = Vec::new();
-        let rows = 3 + wave as usize;
+        let rows = 2 + wave as usize;
         for i in 0..10 {
             for j in 0..rows {
                 enemies.push(Enemy {
