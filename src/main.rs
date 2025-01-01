@@ -1,15 +1,19 @@
 use ggez::audio::{SoundSource, Source};
 use ggez::event::{self, EventHandler};
-use ggez::graphics::{self, Color, Rect, Text, TextFragment};
+use ggez::graphics::{self, Color, Image, Rect, Text, TextFragment, Drawable};
 use ggez::input::keyboard::KeyCode;
 use ggez::{Context, ContextBuilder, GameResult};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
-const SCREEN_WIDTH: f32 = 800.0;
-const SCREEN_HEIGHT: f32 = 600.0;
+const SCREEN_WIDTH: f32 = 1024.0;
+const SCREEN_HEIGHT: f32 = 768.0;
 const PLAYER_SPEED: f32 = 300.0;
-const BULLET_SPEED: f32 = 500.0;
-const INITIAL_ENEMY_SPEED: f32 = 50.0;
+const BULLET_SPEED: f32 = 700.0;
+const INITIAL_ENEMY_SPEED: f32 = 100.0;
 const DEFENDER_LINE: f32 = 100.0;
+const TEXT_SCROLL_SPEED: f32 = 100.0;
 
 struct Bullet {
     x: f32,
@@ -32,65 +36,87 @@ struct MainState {
     enemies: Vec<Enemy>,
     enemy_direction: f32,
     enemy_speed: f32,
+    wave_number: u32,
     state: GameState,
+    scroll_text: Text,
+    text_x: Arc<Mutex<f32>>,
     shoot_sound: Source,
     hit_sound: Source,
+    background: Image,
 }
 
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
         let shoot_sound = Source::new(ctx, "/shoot.wav")?;
         let hit_sound = Source::new(ctx, "/hit.wav")?;
+        let background = Image::from_path(ctx, "/background.png")?;
+
+        let scroll_text = Text::new(TextFragment {
+            text: "Happy New Year Octavio".to_string(),
+            color: Some(Color::from_rgb(255, 255, 255)),
+            scale: Some(graphics::PxScale::from(60.0)),
+            ..Default::default()
+        });
+
+        let text_x = Arc::new(Mutex::new(SCREEN_WIDTH));
+
+        // Hintergrund-Thread für die Laufschrift starten
+        let text_x_clone = Arc::clone(&text_x);
+        thread::spawn(move || {
+            loop {
+                {
+                    let mut position = text_x_clone.lock().unwrap();
+                    *position -= TEXT_SCROLL_SPEED * 0.016;
+                    if *position < -500.0 {
+                        *position = SCREEN_WIDTH;
+                    }
+                }
+                thread::sleep(Duration::from_millis(16));
+            }
+        });
 
         Ok(MainState {
             player_x: SCREEN_WIDTH / 2.0,
             bullets: Vec::new(),
-            enemies: MainState::generate_enemies(),
+            enemies: MainState::generate_enemies(1),
             enemy_direction: 1.0,
             enemy_speed: INITIAL_ENEMY_SPEED,
+            wave_number: 1,
             state: GameState::Playing,
+            scroll_text,
+            text_x,
             shoot_sound,
             hit_sound,
+            background,
         })
     }
 
     fn reset(&mut self) {
         self.player_x = SCREEN_WIDTH / 2.0;
         self.bullets.clear();
-        self.enemies = MainState::generate_enemies();
+        self.enemies = MainState::generate_enemies(1);
         self.enemy_direction = 1.0;
         self.enemy_speed = INITIAL_ENEMY_SPEED;
+        self.wave_number = 1;
+
+        let mut text_x = self.text_x.lock().unwrap();
+        *text_x = SCREEN_WIDTH;
+
         self.state = GameState::Playing;
     }
 
-    fn generate_enemies() -> Vec<Enemy> {
+    fn generate_enemies(wave: u32) -> Vec<Enemy> {
         let mut enemies = Vec::new();
+        let rows = 3 + wave as usize; // Mehr Feinde pro Welle
         for i in 0..10 {
-            for j in 0..3 {
+            for j in 0..rows {
                 enemies.push(Enemy {
                     x: 50.0 + i as f32 * 60.0,
-                    y: 50.0 + j as f32 * 50.0,
+                    y: 100.0 + j as f32 * 50.0,
                 });
             }
         }
         enemies
-    }
-
-    fn shoot(&mut self, ctx: &mut Context) {
-        if matches!(self.state, GameState::Playing) {
-            self.bullets.push(Bullet {
-                x: self.player_x,
-                y: SCREEN_HEIGHT - 50.0,
-            });
-
-            // Schuss-Sound abspielen
-            let _ = self.shoot_sound.play(ctx);
-        }
-    }
-
-    fn next_wave(&mut self) {
-        self.enemies = MainState::generate_enemies();
-        self.enemy_speed += 20.0;
     }
 }
 
@@ -111,52 +137,41 @@ impl EventHandler for MainState {
 
         self.player_x = self.player_x.clamp(25.0, SCREEN_WIDTH - 25.0);
 
-        for enemy in &mut self.enemies {
-            enemy.x += self.enemy_direction * self.enemy_speed * dt;
-        }
-
-        if self
-            .enemies
-            .iter()
-            .any(|e| e.x <= 25.0 || e.x >= SCREEN_WIDTH - 25.0)
-        {
-            self.enemy_direction *= -1.0;
-            for enemy in &mut self.enemies {
-                enemy.y += 20.0;
-            }
-        }
-
         for bullet in &mut self.bullets {
             bullet.y -= BULLET_SPEED * dt;
         }
-        self.bullets.retain(|b| b.y > 0.0);
+        self.bullets.retain(|bullet| bullet.y > 0.0);
 
-        let mut hit_detected = false;
-        self.enemies.retain(|enemy| {
-            if self.bullets.iter().any(|bullet| {
-                let distance = ((enemy.x - bullet.x).powi(2) + (enemy.y - bullet.y).powi(2)).sqrt();
-                distance < 20.0
-            }) {
-                hit_detected = true;
-                false
-            } else {
-                true
+        let mut reached_edge = false;
+        for enemy in &mut self.enemies {
+            enemy.x += self.enemy_direction * self.enemy_speed * dt;
+            if enemy.x < 20.0 || enemy.x > SCREEN_WIDTH - 20.0 {
+                reached_edge = true;
             }
+        }
+
+        if reached_edge {
+            self.enemy_direction *= -1.0;
+            for enemy in &mut self.enemies {
+                enemy.y += 40.0;
+            }
+        }
+
+        self.enemies.retain(|enemy| {
+            !self.bullets.iter().any(|bullet| {
+                let dx = enemy.x - bullet.x;
+                let dy = enemy.y - bullet.y;
+                (dx * dx + dy * dy).sqrt() < 20.0
+            })
         });
 
-        if hit_detected {
-            let _ = self.hit_sound.play(ctx);
-        }
-
         if self.enemies.is_empty() {
-            self.next_wave();
+            self.wave_number += 1;
+            self.enemy_speed += 20.0; // Geschwindigkeit erhöhen
+            self.enemies = MainState::generate_enemies(self.wave_number);
         }
 
-        if self
-            .enemies
-            .iter()
-            .any(|enemy| enemy.y >= SCREEN_HEIGHT - DEFENDER_LINE)
-        {
+        if self.enemies.iter().any(|enemy| enemy.y > SCREEN_HEIGHT - DEFENDER_LINE) {
             self.state = GameState::GameOver;
         }
 
@@ -165,6 +180,12 @@ impl EventHandler for MainState {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let mut canvas = graphics::Canvas::from_frame(ctx, Color::BLACK);
+
+        canvas.draw(&self.background, graphics::DrawParam::default());
+
+        let text_x = *self.text_x.lock().unwrap();
+        let text_position = graphics::DrawParam::default().dest([text_x, 20.0]);
+        canvas.draw(&self.scroll_text, text_position);
 
         let player_rect = Rect::new(self.player_x - 25.0, SCREEN_HEIGHT - 50.0, 50.0, 20.0);
         let player_color = Color::from_rgb(0, 255, 0);
@@ -178,11 +199,12 @@ impl EventHandler for MainState {
 
         for bullet in &self.bullets {
             let bullet_rect = Rect::new(bullet.x - 5.0, bullet.y - 10.0, 10.0, 20.0);
+            let bullet_color = Color::WHITE;
             let bullet_mesh = graphics::Mesh::new_rectangle(
                 ctx,
                 graphics::DrawMode::fill(),
                 bullet_rect,
-                Color::WHITE,
+                bullet_color,
             )?;
             canvas.draw(&bullet_mesh, graphics::DrawParam::default());
         }
@@ -200,14 +222,13 @@ impl EventHandler for MainState {
         }
 
         if matches!(self.state, GameState::GameOver) {
-            let text = Text::new(TextFragment {
-                text: "Game Over!\nPress R to Restart".to_string(),
-                color: Some(Color::WHITE),
+            let game_over_text = Text::new(TextFragment {
+                text: "Game Over - \nPress R to Restart".to_string(),
+                color: Some(Color::from_rgb(255, 255, 255)),
+                scale: Some(graphics::PxScale::from(40.0)),
                 ..Default::default()
             });
-            let text_position = graphics::DrawParam::default()
-                .dest([SCREEN_WIDTH / 2.0 - 100.0, SCREEN_HEIGHT / 2.0 - 20.0]);
-            canvas.draw(&text, text_position);
+            canvas.draw(&game_over_text, graphics::DrawParam::default().dest([300.0, 350.0]));
         }
 
         canvas.finish(ctx)?;
@@ -223,7 +244,15 @@ impl EventHandler for MainState {
     ) -> GameResult {
         if let Some(keycode) = input.keycode {
             match keycode {
-                KeyCode::Space => self.shoot(ctx),
+                KeyCode::Space => {
+                    if matches!(self.state, GameState::Playing) {
+                        self.bullets.push(Bullet {
+                            x: self.player_x,
+                            y: SCREEN_HEIGHT - 50.0,
+                        });
+                        let _ = self.shoot_sound.play(ctx);
+                    }
+                }
                 KeyCode::R => self.reset(),
                 _ => {}
             }
