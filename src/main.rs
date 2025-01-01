@@ -1,18 +1,15 @@
+use ggez::audio::{SoundSource, Source};
 use ggez::event::{self, EventHandler};
 use ggez::graphics::{self, Color, Rect, Text, TextFragment};
+use ggez::input::keyboard::KeyCode;
 use ggez::{Context, ContextBuilder, GameResult};
-use ggez::input::keyboard::{KeyCode, KeyInput};
-use ggez::input::keyboard::is_key_pressed;
-use rodio::{OutputStream, OutputStreamHandle, Sink};
-use std::fs::File;
-use std::io::BufReader;
 
 const SCREEN_WIDTH: f32 = 800.0;
 const SCREEN_HEIGHT: f32 = 600.0;
 const PLAYER_SPEED: f32 = 300.0;
 const BULLET_SPEED: f32 = 500.0;
 const INITIAL_ENEMY_SPEED: f32 = 50.0;
-const DEFENDER_LINE: f32 = 100.0; // Linie, die der Verteidiger hält
+const DEFENDER_LINE: f32 = 100.0;
 
 struct Bullet {
     x: f32,
@@ -35,55 +32,38 @@ struct MainState {
     enemies: Vec<Enemy>,
     enemy_direction: f32,
     enemy_speed: f32,
-    wave: u32,
     state: GameState,
-    shoot_sink: Sink,
-    hit_sink: Sink,
+    shoot_sound: Source,
+    hit_sound: Source,
 }
 
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
-        // Audio initialisieren
-        let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-        let shoot_sink = Sink::try_new(&stream_handle).unwrap();
-        let hit_sink = Sink::try_new(&stream_handle).unwrap();
-
-        // Schuss-Sound laden
-        let shoot_file = BufReader::new(File::open("resources/shoot.ogg")
-        .expect("Schuss-Sounddatei 'resources/shoot.ogg' konnte nicht gefunden werden."));
-        let shoot_source = rodio::Decoder::new(shoot_file).unwrap();
-        shoot_sink.append(shoot_source);
-
-        // Treffer-Sound laden
-        let hit_file = BufReader::new(File::open("resources/hit.ogg")
-        .expect("Treffer-Sounddatei 'resources/hit.ogg' konnte nicht gefunden werden."));
-        let hit_source = rodio::Decoder::new(hit_file).unwrap();
-        hit_sink.append(hit_source);
+        let shoot_sound = Source::new(ctx, "/shoot.wav")?;
+        let hit_sound = Source::new(ctx, "/hit.wav")?;
 
         Ok(MainState {
             player_x: SCREEN_WIDTH / 2.0,
             bullets: Vec::new(),
-            enemies: MainState::generate_enemies(1),
+            enemies: MainState::generate_enemies(),
             enemy_direction: 1.0,
             enemy_speed: INITIAL_ENEMY_SPEED,
-            wave: 1,
             state: GameState::Playing,
-            shoot_sink,
-            hit_sink,
+            shoot_sound,
+            hit_sound,
         })
     }
 
     fn reset(&mut self) {
         self.player_x = SCREEN_WIDTH / 2.0;
         self.bullets.clear();
-        self.enemies = MainState::generate_enemies(1);
+        self.enemies = MainState::generate_enemies();
         self.enemy_direction = 1.0;
         self.enemy_speed = INITIAL_ENEMY_SPEED;
-        self.wave = 1;
         self.state = GameState::Playing;
     }
 
-    fn generate_enemies(wave: u32) -> Vec<Enemy> {
+    fn generate_enemies() -> Vec<Enemy> {
         let mut enemies = Vec::new();
         for i in 0..10 {
             for j in 0..3 {
@@ -96,7 +76,7 @@ impl MainState {
         enemies
     }
 
-    fn shoot(&mut self) {
+    fn shoot(&mut self, ctx: &mut Context) {
         if matches!(self.state, GameState::Playing) {
             self.bullets.push(Bullet {
                 x: self.player_x,
@@ -104,46 +84,37 @@ impl MainState {
             });
 
             // Schuss-Sound abspielen
-            self.shoot_sink.stop();
-            let shoot_file = BufReader::new(File::open("resources/shoot.ogg").unwrap());
-            let shoot_source = rodio::Decoder::new(shoot_file).unwrap();
-            self.shoot_sink.append(shoot_source);
-            self.shoot_sink.play();
+            let _ = self.shoot_sound.play(ctx);
         }
     }
 
     fn next_wave(&mut self) {
-        self.wave += 1;
-        self.enemies = MainState::generate_enemies(self.wave);
-        self.enemy_speed += 20.0; // Erhöhe die Geschwindigkeit der Gegner
+        self.enemies = MainState::generate_enemies();
+        self.enemy_speed += 20.0;
     }
 }
 
 impl EventHandler for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         if matches!(self.state, GameState::GameOver) {
-            return Ok(()); // Keine Aktualisierung im Game-Over-Zustand
+            return Ok(());
         }
 
         let dt = ctx.time.delta().as_secs_f32();
 
-        // Bewegung des Spielers basierend auf Eingaben
-        if is_key_pressed(ctx, KeyCode::Left) {
+        if ctx.keyboard.is_key_pressed(KeyCode::Left) {
             self.player_x -= PLAYER_SPEED * dt;
         }
-        if is_key_pressed(ctx, KeyCode::Right) {
+        if ctx.keyboard.is_key_pressed(KeyCode::Right) {
             self.player_x += PLAYER_SPEED * dt;
         }
 
-        // Begrenzung des Spielers auf den Bildschirmbereich
         self.player_x = self.player_x.clamp(25.0, SCREEN_WIDTH - 25.0);
 
-        // Bewegung der Gegner
         for enemy in &mut self.enemies {
             enemy.x += self.enemy_direction * self.enemy_speed * dt;
         }
 
-        // Richtung ändern und nach unten bewegen, wenn Gegner den Rand erreichen
         if self
             .enemies
             .iter()
@@ -151,22 +122,20 @@ impl EventHandler for MainState {
         {
             self.enemy_direction *= -1.0;
             for enemy in &mut self.enemies {
-                enemy.y += 20.0; // Gegner bewegen sich nach unten
+                enemy.y += 20.0;
             }
         }
 
-        // Bewegung der Schüsse
         for bullet in &mut self.bullets {
             bullet.y -= BULLET_SPEED * dt;
         }
-        self.bullets.retain(|b| b.y > 0.0); // Entferne Schüsse außerhalb des Bildschirms
+        self.bullets.retain(|b| b.y > 0.0);
 
-        // Kollisionserkennung
         let mut hit_detected = false;
         self.enemies.retain(|enemy| {
             if self.bullets.iter().any(|bullet| {
                 let distance = ((enemy.x - bullet.x).powi(2) + (enemy.y - bullet.y).powi(2)).sqrt();
-                distance < 20.0 // Trefferbereich
+                distance < 20.0
             }) {
                 hit_detected = true;
                 false
@@ -176,54 +145,88 @@ impl EventHandler for MainState {
         });
 
         if hit_detected {
-            // Treffer-Sound abspielen
-            self.hit_sink.stop();
-            let hit_file = BufReader::new(File::open("resources/hit.ogg").unwrap());
-            let hit_source = rodio::Decoder::new(hit_file).unwrap();
-            self.hit_sink.append(hit_source);
-            self.hit_sink.play();
+            let _ = self.hit_sound.play(ctx);
+        }
+
+        if self.enemies.is_empty() {
+            self.next_wave();
+        }
+
+        if self
+            .enemies
+            .iter()
+            .any(|enemy| enemy.y >= SCREEN_HEIGHT - DEFENDER_LINE)
+        {
+            self.state = GameState::GameOver;
         }
 
         Ok(())
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        // Canvas für das Zeichnen erstellen
         let mut canvas = graphics::Canvas::from_frame(ctx, Color::BLACK);
 
-        // Spieler zeichnen
         let player_rect = Rect::new(self.player_x - 25.0, SCREEN_HEIGHT - 50.0, 50.0, 20.0);
         let player_color = Color::from_rgb(0, 255, 0);
-        let player_mesh = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), player_rect, player_color)?;
+        let player_mesh = graphics::Mesh::new_rectangle(
+            ctx,
+            graphics::DrawMode::fill(),
+            player_rect,
+            player_color,
+        )?;
         canvas.draw(&player_mesh, graphics::DrawParam::default());
 
-        // Schüsse zeichnen
         for bullet in &self.bullets {
             let bullet_rect = Rect::new(bullet.x - 5.0, bullet.y - 10.0, 10.0, 20.0);
-            let bullet_mesh = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), bullet_rect, Color::WHITE)?;
+            let bullet_mesh = graphics::Mesh::new_rectangle(
+                ctx,
+                graphics::DrawMode::fill(),
+                bullet_rect,
+                Color::WHITE,
+            )?;
             canvas.draw(&bullet_mesh, graphics::DrawParam::default());
         }
 
-        // Gegner zeichnen
         for enemy in &self.enemies {
             let enemy_rect = Rect::new(enemy.x - 20.0, enemy.y - 20.0, 40.0, 40.0);
             let enemy_color = Color::from_rgb(255, 0, 0);
-            let enemy_mesh = graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), enemy_rect, enemy_color)?;
+            let enemy_mesh = graphics::Mesh::new_rectangle(
+                ctx,
+                graphics::DrawMode::fill(),
+                enemy_rect,
+                enemy_color,
+            )?;
             canvas.draw(&enemy_mesh, graphics::DrawParam::default());
         }
 
-        // Canvas abschließen
+        if matches!(self.state, GameState::GameOver) {
+            let text = Text::new(TextFragment {
+                text: "Game Over!\nPress R to Restart".to_string(),
+                color: Some(Color::WHITE),
+                ..Default::default()
+            });
+            let text_position = graphics::DrawParam::default()
+                .dest([SCREEN_WIDTH / 2.0 - 100.0, SCREEN_HEIGHT / 2.0 - 20.0]);
+            canvas.draw(&text, text_position);
+        }
+
         canvas.finish(ctx)?;
 
         Ok(())
     }
 
-    fn key_down_event(&mut self, _ctx: &mut Context, input: KeyInput, _repeat: bool) -> GameResult {
-        if let Some(KeyCode::Space) = input.keycode {
-            self.shoot();
-        }
-        if let Some(KeyCode::R) = input.keycode {
-            self.reset();
+    fn key_down_event(
+        &mut self,
+        ctx: &mut Context,
+        input: ggez::input::keyboard::KeyInput,
+        _repeat: bool,
+    ) -> GameResult {
+        if let Some(keycode) = input.keycode {
+            match keycode {
+                KeyCode::Space => self.shoot(ctx),
+                KeyCode::R => self.reset(),
+                _ => {}
+            }
         }
         Ok(())
     }
@@ -233,7 +236,8 @@ fn main() -> GameResult {
     let (mut ctx, event_loop) = ContextBuilder::new("space_invaders", "Author")
         .window_setup(ggez::conf::WindowSetup::default().title("Space Invaders"))
         .window_mode(ggez::conf::WindowMode::default().dimensions(SCREEN_WIDTH, SCREEN_HEIGHT))
+        .add_resource_path("./resources")
         .build()?;
-    let mut state = MainState::new(&mut ctx)?; // ctx ist jetzt mutable
+    let state = MainState::new(&mut ctx)?;
     event::run(ctx, event_loop, state)
 }
