@@ -55,7 +55,7 @@ impl MainState {
         let background = Image::from_path(ctx, "/background.png")?;
 
         let scroll_text = Text::new(TextFragment {
-            text: "Happy New Year Octavio".to_string(),
+            text: "Happy New Year".to_string(),
             color: Some(Color::from_rgb(255, 255, 255)),
             scale: Some(graphics::PxScale::from(30.0)),
             ..Default::default()
