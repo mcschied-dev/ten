@@ -1,6 +1,7 @@
 # Space Invaders Game in Rust
 
 A simple Space Invaders clone built using the [ggez](https://ggez.rs/) game development library. This game features dynamic gameplay with increasing difficulty and an engaging background text scroll.
+;-)))
 
 ## Features
 
