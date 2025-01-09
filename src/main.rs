@@ -1,3 +1,5 @@
+// learning RUST - 
+
 use ggez::audio::{SoundSource, Source};
 use ggez::event::{self, EventHandler};
 use ggez::graphics::{self, Color, Image, Rect, Text, TextFragment, Drawable};
@@ -6,6 +8,8 @@ use ggez::{Context, ContextBuilder, GameResult};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+
+// CONST
 
 const SCREEN_WIDTH: f32 = 1024.0;
 const SCREEN_HEIGHT: f32 = 768.0;
@@ -32,13 +36,13 @@ enum GameState {
 
 struct MainState {
     player_x: f32,
-    base_width: f32,        // Breite der Basisstation
+    base_width: f32,        
     bullets: Vec<Bullet>,
     enemies: Vec<Enemy>,
     enemy_direction: f32,
     enemy_speed: f32,
     wave_number: u32,
-    available_shots: u32,   // Anzahl der Schüsse
+    available_shots: u32,   
     state: GameState,
     scroll_text: Text,
     text_x: Arc<Mutex<f32>>,
@@ -80,13 +84,13 @@ impl MainState {
 
         Ok(MainState {
             player_x: SCREEN_WIDTH / 2.0,
-            base_width: 50.0, // Anfangsbreite der Basisstation
+            base_width: 50.0, 
             bullets: Vec::new(),
             enemies: MainState::generate_enemies(1),
             enemy_direction: 1.0,
             enemy_speed: INITIAL_ENEMY_SPEED,
             wave_number: 1,
-            available_shots: 1, // Start mit 1 Schuss
+            available_shots: 1, 
             state: GameState::Playing,
             scroll_text,
             text_x,
@@ -99,13 +103,13 @@ impl MainState {
 
     fn reset(&mut self) {
         self.player_x = SCREEN_WIDTH / 2.0;
-        self.base_width = 50.0; // Breite der Basisstation zurücksetzen
+        self.base_width = 50.0; 
         self.bullets.clear();
         self.enemies = MainState::generate_enemies(1);
         self.enemy_direction = 1.0;
         self.enemy_speed = INITIAL_ENEMY_SPEED;
         self.wave_number = 1;
-        self.available_shots = 1; // Zurücksetzen auf 1 Schuss
+        self.available_shots = 1; 
         self.score = 0;
 
         let mut text_x = self.text_x.lock().unwrap();
@@ -182,8 +186,8 @@ impl EventHandler for MainState {
         if self.enemies.is_empty() {
             self.wave_number += 1;
             self.enemy_speed += 20.0;
-            self.available_shots += 1; // Erhöhe die Anzahl der Schüsse
-            self.base_width += 20.0; // Verbreitere die Basisstation
+            self.available_shots += 1; 
+            self.base_width += 20.0; 
             self.enemies = MainState::generate_enemies(self.wave_number);
         }
 
@@ -270,7 +274,7 @@ impl EventHandler for MainState {
             match keycode {
                 KeyCode::Space => {
                     if matches!(self.state, GameState::Playing) {
-                        // Schüsse basierend auf der Anzahl der verfügbaren Schüsse
+                      
                         let offset = self.base_width / (self.available_shots + 1) as f32;
                         for i in 0..self.available_shots {
                             let bullet_x = self.player_x - self.base_width / 2.0 + offset * (i as f32 + 1.0);
