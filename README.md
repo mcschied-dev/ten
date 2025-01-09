@@ -37,3 +37,4 @@ A simple Space Invaders clone built using the [ggez](https://ggez.rs/) game deve
    ```bash
    git clone https://github.com/your-username/space-invaders.git
    cd space-invaders
+   cargo run
