@@ -1,4 +1,4 @@
-// learning RUST -
+// mcschied is learning RUST -
 
 use ggez::audio::{SoundSource, Source};
 use ggez::event::{self, EventHandler};
@@ -227,7 +227,6 @@ impl EventHandler for MainState {
         )?;
         canvas.draw(&player_mesh, graphics::DrawParam::default());
 
-        // Schüsse zeichnen
         for bullet in &self.bullets {
             let bullet_rect = Rect::new(bullet.x - 5.0, bullet.y - 10.0, 10.0, 20.0);
             let bullet_color = Color::WHITE;
@@ -240,7 +239,6 @@ impl EventHandler for MainState {
             canvas.draw(&bullet_mesh, graphics::DrawParam::default());
         }
 
-        // Feinde zeichnen
         for enemy in &self.enemies {
             let enemy_rect = Rect::new(enemy.x - 20.0, enemy.y - 20.0, 40.0, 40.0);
             let enemy_color = Color::from_rgb(255, 0, 0);
