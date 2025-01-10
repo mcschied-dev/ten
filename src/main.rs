@@ -1,10 +1,11 @@
+// @mcschied
+
 use ggez::audio::{SoundSource, Source};
 use ggez::event::{self, EventHandler};
 use ggez::graphics::{self, Color, Drawable, Image, Text, TextFragment};
 use ggez::input::keyboard::KeyCode;
 use ggez::{Context, ContextBuilder, GameResult};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use std::path::Path;
 use ggez::filesystem;
 
@@ -68,7 +69,7 @@ impl MainState {
         let scroll_text = Text::new(TextFragment {
             text: "Happy New Year".to_string(),
             color: Some(Color::from_rgb(0, 0, 0)),
-            scale: Some(graphics::PxScale::from(30.0)),
+            scale: Some(graphics::PxScale::from(50.0)),
             ..Default::default()
         });
 
@@ -273,12 +274,12 @@ impl EventHandler for MainState {
             let game_over_text = Text::new(TextFragment {
                 text: "Game Over - Press R to Restart".to_string(),
                 color: Some(Color::from_rgb(0, 0, 0)),
-                scale: Some(graphics::PxScale::from(40.0)),
+                scale: Some(graphics::PxScale::from(60.0)),
                 ..Default::default()
             });
             canvas.draw(
                 &game_over_text,
-                graphics::DrawParam::default().dest([300.0, 350.0]),
+                graphics::DrawParam::default().dest([35.0, 70.0]),
             );
         }
 
@@ -323,7 +324,7 @@ fn main() -> GameResult {
 
     // Kontext erstellen
     let (mut ctx, event_loop) = ContextBuilder::new("space_invaders", "Author")
-        .window_setup(ggez::conf::WindowSetup::default().title("Space Invaders"))
+        .window_setup(ggez::conf::WindowSetup::default().title("Hummel Invaders"))
         .window_mode(ggez::conf::WindowMode::default().dimensions(SCREEN_WIDTH, SCREEN_HEIGHT))
         .build()?;
 
