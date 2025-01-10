@@ -4,7 +4,6 @@ use ggez::graphics::{self, Color, Drawable, Image, Text, TextFragment};
 use ggez::input::keyboard::KeyCode;
 use ggez::{Context, ContextBuilder, GameResult};
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::time::Duration;
 
 // Konstanten
@@ -43,29 +42,27 @@ struct MainState {
     state: GameState,
     scroll_text: Text,
     text_x: Arc<Mutex<f32>>,
-    scroll_direction: Arc<Mutex<f32>>, // Richtung der Laufschrift
+    scroll_direction: Arc<Mutex<f32>>,
     shoot_sound: Source,
     hit_sound: Source,
     background: Image,
     enemy_image: Image,
     score: u32,
     background_music: Source,
+    moved_down: bool, // Neue Flagge für kontrollierte Bewegung nach unten
 }
 
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
-        // Sounds und Bilder laden
         let shoot_sound = Source::new(ctx, "/shoot.wav")?;
         let hit_sound = Source::new(ctx, "/hit.wav")?;
         let background = Image::from_path(ctx, "/background.png")?;
         let enemy_image = Image::from_path(ctx, "/enemy.png")?;
 
-        // Hintergrundmusik laden und auf "Loop" setzen
         let mut background_music = Source::new(ctx, "/background_music.wav")?;
         background_music.set_repeat(true);
         background_music.play(ctx)?;
 
-        // Laufschrift erstellen
         let scroll_text = Text::new(TextFragment {
             text: "Happy New Year".to_string(),
             color: Some(Color::from_rgb(0, 0, 0)),
@@ -75,26 +72,6 @@ impl MainState {
 
         let text_x = Arc::new(Mutex::new(SCREEN_WIDTH));
         let scroll_direction = Arc::new(Mutex::new(-1.0)); // Startet von rechts nach links
-
-        // Hintergrund-Thread für die Laufschrift
-        let text_x_clone = Arc::clone(&text_x);
-        let scroll_direction_clone = Arc::clone(&scroll_direction);
-        thread::spawn(move || loop {
-            {
-                let mut position = text_x_clone.lock().unwrap();
-                let mut direction = scroll_direction_clone.lock().unwrap();
-
-                *position += *direction * TEXT_SCROLL_SPEED * 0.030;
-
-                // Wenn der Text die Bildschirmränder erreicht, Richtung umkehren
-                if *position <= 0.0 && *direction < 0.0 {
-                    *direction = 1.0; // Von links nach rechts
-                } else if *position >= SCREEN_WIDTH && *direction > 0.0 {
-                    *direction = -1.0; // Von rechts nach links
-                }
-            }
-            thread::sleep(Duration::from_millis(16)); // 16 ms für 60 FPS
-        });
 
         Ok(MainState {
             player_x: SCREEN_WIDTH / 2.0,
@@ -115,9 +92,9 @@ impl MainState {
             enemy_image,
             score: 0,
             background_music,
+            moved_down: false,
         })
     }
-
 
     fn reset(&mut self, ctx: &mut Context) {
         self.player_x = SCREEN_WIDTH / 2.0;
@@ -129,13 +106,13 @@ impl MainState {
         self.wave_number = 1;
         self.available_shots = 1;
         self.score = 0;
+        self.moved_down = false;
 
         let mut text_x = self.text_x.lock().unwrap();
         *text_x = SCREEN_WIDTH;
 
         self.state = GameState::Playing;
 
-        // Hintergrundmusik stoppen und neu starten
         self.background_music.stop(ctx).ok();
         self.background_music.play(ctx).expect("Fehler beim Abspielen der Musik");
     }
@@ -175,37 +152,52 @@ impl EventHandler for MainState {
             .player_x
             .clamp(self.base_width / 2.0, SCREEN_WIDTH - self.base_width / 2.0);
 
+        // Laufschrift aktualisieren
+        {
+            let mut position = self.text_x.lock().unwrap();
+            let mut direction = self.scroll_direction.lock().unwrap();
+
+            *position += *direction * TEXT_SCROLL_SPEED * dt;
+
+            if *position <= 0.0 && *direction < 0.0 {
+                *direction = 1.0; // Von links nach rechts
+            } else if *position >= SCREEN_WIDTH && *direction > 0.0 {
+                *direction = -1.0; // Von rechts nach links
+            }
+        }
+
+        let mut reached_edge = false;
+        for enemy in &mut self.enemies {
+            enemy.x += self.enemy_direction * self.enemy_speed * dt;
+
+            if enemy.x < 20.0 || enemy.x > SCREEN_WIDTH - 20.0 {
+                reached_edge = true;
+            }
+        }
+
+        if reached_edge && !self.moved_down {
+            self.enemy_direction *= -1.0;
+            self.moved_down = true;
+
+            for enemy in &mut self.enemies {
+                enemy.y += 40.0;
+
+                if enemy.y > SCREEN_HEIGHT - DEFENDER_LINE {
+                    println!("Feind hat die Linie überschritten: y = {}", enemy.y);
+                    self.state = GameState::GameOver;
+                    return Ok(());
+                }
+            }
+        } else if !reached_edge {
+            self.moved_down = false;
+        }
+
         for bullet in &mut self.bullets {
             bullet.y -= BULLET_SPEED * dt;
         }
         self.bullets.retain(|bullet| bullet.y > 0.0);
 
-        let mut reached_edge = false;
-        for enemy in &mut self.enemies {
-            enemy.x += self.enemy_direction * self.enemy_speed * dt;
-        
-            // Überprüfen, ob ein Feind den Bildschirmrand erreicht hat
-            if enemy.x < 20.0 || enemy.x > SCREEN_WIDTH - 20.0 {
-                reached_edge = true;
-            }
-        }
-        
-        if reached_edge {
-            self.enemy_direction *= -1.0; // Richtung umkehren
-        
-            for enemy in &mut self.enemies {
-                // Bewegung nach unten begrenzen, damit Feinde nicht zu tief springen
-                enemy.y += 40.0;
-                if enemy.y > SCREEN_HEIGHT - DEFENDER_LINE {
-                    // Spiel-Ende-Bedingung setzen, wenn Feinde die Verteidigungslinie erreichen
-                    self.state = GameState::GameOver;
-                    break;
-                }
-            }
-        }
-
         let initial_enemy_count = self.enemies.len();
-
         self.enemies.retain(|enemy| {
             let is_hit = self.bullets.iter().any(|bullet| {
                 let dx = enemy.x - bullet.x;
@@ -229,14 +221,6 @@ impl EventHandler for MainState {
             self.available_shots += 1;
             self.base_width += 20.0;
             self.enemies = MainState::generate_enemies(self.wave_number);
-        }
-
-        if self
-            .enemies
-            .iter()
-            .any(|enemy| enemy.y > SCREEN_HEIGHT - DEFENDER_LINE)
-        {
-            self.state = GameState::GameOver;
         }
 
         Ok(())
@@ -333,7 +317,7 @@ impl EventHandler for MainState {
 
 fn main() -> GameResult {
     let (mut ctx, event_loop) = ContextBuilder::new("space_invaders", "Author")
-        .window_setup(ggez::conf::WindowSetup::default().title("Space Invaders"))
+        .window_setup(ggez::conf::WindowSetup::default().title("Hummel Invaders"))
         .window_mode(ggez::conf::WindowMode::default().dimensions(SCREEN_WIDTH, SCREEN_HEIGHT))
         .add_resource_path("./resources")
         .build()?;
