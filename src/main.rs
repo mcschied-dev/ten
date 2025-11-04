@@ -15,6 +15,30 @@ use entities::{Bullet, Enemy, Player};
 use highscore::HighscoreManager;
 use systems::{generate_wave, process_collisions};
 
+/// Resolve resource path for both development and bundled environments
+fn resolve_resource_path(resource_path: &str) -> String {
+    // In development, resources are relative to the executable
+    // In macOS bundle, resources are in Contents/Resources/
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(bundle_path) = exe_path.parent() {
+            // Check if we're in a macOS bundle (Contents/MacOS/)
+            if bundle_path.ends_with("MacOS") {
+                if let Some(contents_path) = bundle_path.parent() {
+                    if let Some(resources_path) = contents_path.parent() {
+                        let bundle_resources = resources_path.join("Resources").join(resource_path);
+                        if bundle_resources.exists() {
+                            return bundle_resources.to_string_lossy().to_string();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback to relative path (development mode)
+    resource_path.to_string()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GameState {
     Menu,
@@ -57,19 +81,19 @@ impl Game {
     async fn new() -> Self {
         log::info!("Loading game resources");
 
-        let background = load_texture("resources/background.png")
+        let background = load_texture(&resolve_resource_path("resources/background.png"))
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[0, 0, 0, 255]));
 
-        let enemy_image = load_texture("resources/enemy.png")
+        let enemy_image = load_texture(&resolve_resource_path("resources/enemy.png"))
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[255, 255, 255, 255]));
 
-        let shoot_sound = load_sound("resources/shoot.wav").await.ok();
+        let shoot_sound = load_sound(&resolve_resource_path("resources/shoot.wav")).await.ok();
 
-        let hit_sound = load_sound("resources/hit.wav").await.ok();
+        let hit_sound = load_sound(&resolve_resource_path("resources/hit.wav")).await.ok();
 
-        let background_music = load_sound("resources/background_music.wav").await.ok();
+        let background_music = load_sound(&resolve_resource_path("resources/background_music.wav")).await.ok();
 
         log::info!("Game state created successfully");
 
