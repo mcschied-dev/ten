@@ -366,7 +366,31 @@ impl Game {
 
         let text_y = 50.0 + wobble_offset;
 
-        draw_text("Happy New Year", text_x, text_y, 50.0, BLACK);
+        // C64-style blinking effect (blink every 0.5 seconds)
+        let blink_visible = (self.scroll_text_time * 2.0).sin() > 0.0;
+
+        // C64-style rainbow color cycling
+        let color_cycle = (self.scroll_text_time * 1.5).sin() * 0.5 + 0.5; // 0.0 to 1.0
+        let color_index = (color_cycle * 7.0) as i32;
+
+        let text_color = match color_index {
+            0 => Color::from_rgba(255, 0, 0, 255),     // Red
+            1 => Color::from_rgba(255, 165, 0, 255),   // Orange
+            2 => Color::from_rgba(255, 255, 0, 255),   // Yellow
+            3 => Color::from_rgba(0, 255, 0, 255),     // Green
+            4 => Color::from_rgba(0, 0, 255, 255),     // Blue
+            5 => Color::from_rgba(75, 0, 130, 255),    // Indigo
+            _ => Color::from_rgba(238, 130, 238, 255), // Violet
+        };
+
+        // Large bitmap-style text (increased size and add shadow for bitmap effect)
+        let font_size = 80.0;
+
+        // Draw shadow for bitmap effect
+        if blink_visible {
+            draw_text("Happy New Year", text_x + 2.0, text_y + 2.0, font_size, Color::from_rgba(0, 0, 0, 128));
+            draw_text("Happy New Year", text_x, text_y, font_size, text_color);
+        }
     }
 
     fn draw_player(&self) {
