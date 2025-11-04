@@ -40,6 +40,7 @@ struct Game {
     // UI elements
     scroll_text_x: Arc<Mutex<f32>>,
     scroll_direction: Arc<Mutex<f32>>,
+    scroll_text_time: f32, // Time accumulator for wobble effect
     background_scroll_x: f32,
 
     // Resources
@@ -86,6 +87,7 @@ impl Game {
             highscore_manager: HighscoreManager::new("highscores.txt"),
             scroll_text_x: Arc::new(Mutex::new(SCREEN_WIDTH)),
             scroll_direction: Arc::new(Mutex::new(-1.0)),
+            scroll_text_time: 0.0,
             background_scroll_x: 0.0,
             background,
             enemy_image,
@@ -115,6 +117,7 @@ impl Game {
 
         let mut text_x = self.scroll_text_x.lock().unwrap();
         *text_x = SCREEN_WIDTH;
+        self.scroll_text_time = 0.0;
     }
 
     fn start_game(&mut self) {
@@ -265,6 +268,9 @@ impl Game {
         } else if *position >= SCREEN_WIDTH && *direction > 0.0 {
             *direction = -1.0;
         }
+
+        // Update wobble time accumulator
+        self.scroll_text_time += dt;
     }
 
     fn update_background_scroll(&mut self, dt: f32) {
@@ -352,7 +358,15 @@ impl Game {
 
     fn draw_scroll_text(&self) {
         let text_x = *self.scroll_text_x.lock().unwrap();
-        draw_text("Happy New Year", text_x, 50.0, 50.0, BLACK);
+
+        // Add C64-style wobble effect using sine wave
+        let wobble_amplitude = 8.0; // How much the text moves up and down
+        let wobble_frequency = 3.0; // How fast the wobble oscillates
+        let wobble_offset = (self.scroll_text_time * wobble_frequency).sin() * wobble_amplitude;
+
+        let text_y = 50.0 + wobble_offset;
+
+        draw_text("Happy New Year", text_x, text_y, 50.0, BLACK);
     }
 
     fn draw_player(&self) {
