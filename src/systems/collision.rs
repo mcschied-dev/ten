@@ -39,7 +39,7 @@ pub fn process_collisions(enemies: &mut Vec<Enemy>, bullets: &[Bullet]) -> usize
 
     let destroyed = initial_count - enemies.len();
     if destroyed > 0 {
-        log::debug!("Destroyed {} enemies in collision check", destroyed);
+        log::debug!("Destroyed {destroyed} enemies in collision check");
     }
 
     destroyed

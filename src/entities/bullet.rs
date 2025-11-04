@@ -23,7 +23,7 @@ impl Bullet {
     /// * `y` - Initial Y coordinate
     #[must_use]
     pub fn new(x: f32, y: f32) -> Self {
-        log::debug!("Creating bullet at ({}, {})", x, y);
+        log::debug!("Creating bullet at ({x}, {y})");
         Self { x, y }
     }
 

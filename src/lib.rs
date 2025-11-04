@@ -1,4 +1,4 @@
-//! BumbleBees - A Space Invaders Clone
+//! `BumbleBees` - A Space Invaders Clone
 //!
 //! This is a classic arcade-style space shooter game built with Rust and macroquad.
 //! Features include:

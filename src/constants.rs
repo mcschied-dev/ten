@@ -21,12 +21,6 @@ pub const INITIAL_ENEMY_SPEED: f32 = 150.0;
 /// Distance from bottom of screen where enemies trigger game over
 pub const DEFENDER_LINE: f32 = 100.0;
 
-/// Speed of the scrolling text in pixels per second
-pub const TEXT_SCROLL_SPEED: f32 = 100.0;
-
-/// Speed of the parallax background scrolling in pixels per second
-pub const BACKGROUND_SCROLL_SPEED: f32 = 50.0;
-
 /// Collision detection radius in pixels
 pub const COLLISION_RADIUS: f32 = 20.0;
 

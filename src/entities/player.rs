@@ -61,6 +61,7 @@ impl Player {
     ///
     /// A vector of bullets evenly spaced across the player's base width.
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn shoot(&self) -> Vec<Bullet> {
         let mut bullets = Vec::new();
         let offset = self.base_width / (self.available_shots + 1) as f32;
@@ -95,12 +96,14 @@ impl Player {
 
     /// Get player Y position.
     #[must_use]
+    #[allow(clippy::unused_self)]
     pub const fn y(&self) -> f32 {
         SCREEN_HEIGHT - 50.0
     }
 
     /// Get player height.
     #[must_use]
+    #[allow(clippy::unused_self)]
     pub const fn height(&self) -> f32 {
         20.0
     }

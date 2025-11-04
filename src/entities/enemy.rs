@@ -1,6 +1,6 @@
 //! Enemy entity implementation.
 
-use crate::constants::{DEFENDER_LINE, SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::constants::{DEFENDER_LINE, SCREEN_HEIGHT};
 
 /// Represents an enemy in the game.
 ///
@@ -40,12 +40,6 @@ impl Enemy {
         self.x += self.direction * speed * dt;
     }
 
-    /// Check if enemy has reached the screen edge.
-    #[must_use]
-    pub fn has_reached_edge(&self) -> bool {
-        self.x < 20.0 || self.x > SCREEN_WIDTH - 20.0
-    }
-
     /// Check if enemy has breached the defender line (game over condition).
     #[must_use]
     pub fn has_breached_defender_line(&self) -> bool {
@@ -67,17 +61,5 @@ mod tests {
     fn test_no_defender_line_breach() {
         let enemy = Enemy::new(100.0, SCREEN_HEIGHT - DEFENDER_LINE - 10.0, 1.0);
         assert!(!enemy.has_breached_defender_line());
-    }
-
-    #[test]
-    fn test_reached_left_edge() {
-        let enemy = Enemy::new(15.0, 100.0, 1.0);
-        assert!(enemy.has_reached_edge());
-    }
-
-    #[test]
-    fn test_reached_right_edge() {
-        let enemy = Enemy::new(SCREEN_WIDTH - 15.0, 100.0, 1.0);
-        assert!(enemy.has_reached_edge());
     }
 }

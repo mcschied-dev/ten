@@ -1,6 +1,6 @@
 //! Highscore management with cross-platform storage.
 //!
-//! Uses file I/O on desktop and LocalStorage on WASM.
+//! Uses file I/O on desktop and `LocalStorage` on WASM.
 
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +11,7 @@ pub struct HighscoreEntry {
 }
 
 impl HighscoreEntry {
+    #[must_use]
     pub fn new(name: String, score: u32) -> Self {
         Self { name, score }
     }
@@ -21,6 +22,7 @@ pub struct HighscoreManager {
 }
 
 impl HighscoreManager {
+    #[must_use]
     pub fn new(key: &str) -> Self {
         Self {
             storage_key: key.to_string(),
@@ -28,6 +30,7 @@ impl HighscoreManager {
     }
 
     /// Load highscores from storage, sorted by score (highest first)
+    #[must_use]
     pub fn load_highscores(&self) -> Vec<HighscoreEntry> {
         #[cfg(target_arch = "wasm32")]
         {
@@ -62,6 +65,7 @@ impl HighscoreManager {
     }
 
     /// Get top N highscores
+    #[must_use]
     pub fn get_top_scores(&self, n: usize) -> Vec<HighscoreEntry> {
         let mut scores = self.load_highscores();
         scores.truncate(n);
@@ -81,9 +85,8 @@ impl HighscoreManager {
             return Vec::new();
         }
 
-        let file = match File::open(path) {
-            Ok(f) => f,
-            Err(_) => return Vec::new(),
+        let Ok(file) = File::open(path) else {
+            return Vec::new();
         };
 
         let reader = BufReader::new(file);

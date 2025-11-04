@@ -1,4 +1,4 @@
-//! BumbleBees - Space Invaders-style arcade shooter
+//! `BumbleBees` - Space Invaders-style arcade shooter
 //! Macroquad edition with WASM support
 
 use macroquad::audio::{
@@ -12,7 +12,7 @@ mod entities;
 mod highscore;
 mod systems;
 
-use constants::*;
+use constants::{INITIAL_ENEMY_SPEED, POINTS_PER_ENEMY, SCREEN_HEIGHT, SCREEN_WIDTH, SPEED_INCREASE_PER_WAVE};
 use entities::{Bullet, Enemy, Player};
 use highscore::HighscoreManager;
 use systems::{generate_wave, process_collisions};
@@ -338,7 +338,9 @@ impl Game {
     }
 
     fn start_game(&mut self) {
-        if !self.player_name.is_empty() {
+        if self.player_name.is_empty() {
+            log::warn!("Cannot start game without player name");
+        } else {
             log::info!("Starting game for player: {}", self.player_name);
             self.state = GameState::Playing;
             self.score = 0;
@@ -359,8 +361,6 @@ impl Game {
                     },
                 );
             }
-        } else {
-            log::warn!("Cannot start game without player name");
         }
     }
 
@@ -455,6 +455,7 @@ impl Game {
         }
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     fn update_collisions(&mut self) {
         let enemies_destroyed = process_collisions(&mut self.enemies, &self.bullets);
 
@@ -605,13 +606,13 @@ impl Game {
             };
 
             // Only scroll layers that have speed > 0 (non-static layers)
-            if layer.speed != 0.0 {
+            if layer.speed == 0.0 {
+                // Static sky layer - just draw once
+                draw_texture(texture, 0.0, 0.0, WHITE);
+            } else {
                 for &x_pos in &layer.parts {
                     draw_texture(texture, x_pos, 0.0, WHITE);
                 }
-            } else {
-                // Static sky layer - just draw once
-                draw_texture(texture, 0.0, 0.0, WHITE);
             }
         }
     }
@@ -692,6 +693,7 @@ impl Game {
     /// * `y` - Y coordinate for text positioning
     /// * `scale` - Scale factor for font size (1.0 = 8x8 pixels per character)
     /// * `color` - Color to tint the font (white pixels in font become this color)
+    #[allow(clippy::cast_precision_loss)]
     fn draw_custom_text(&self, text: &str, x: f32, y: f32, scale: f32, color: Color) {
         let char_width = 8.0; // Assuming 8x8 pixel characters
         let char_height = 8.0;
@@ -740,6 +742,7 @@ impl Game {
         }
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn draw_menu(&self) {
         // Draw parallax backgrounds
         self.draw_background();
@@ -924,6 +927,7 @@ impl Game {
     }
 }
 
+#[allow(clippy::cast_possible_truncation)]
 fn window_conf() -> Conf {
     Conf {
         window_title: "BumbleBees".to_owned(),
@@ -949,7 +953,7 @@ async fn main() {
         game.update(dt);
         game.draw();
 
-        next_frame().await
+        next_frame().await;
     }
 }
 

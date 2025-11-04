@@ -6,7 +6,7 @@ use crate::entities::Enemy;
 /// Generate enemies for a given wave number.
 ///
 /// Each wave generates a grid of enemies with progressively more rows.
-/// The formula is: rows = 2 + wave_number, with a constant 10 columns.
+/// The formula is: rows = 2 + `wave_number`, with a constant 10 columns.
 ///
 /// # Arguments
 ///
@@ -24,17 +24,14 @@ use crate::entities::Enemy;
 /// let wave_2 = generate_wave(2);  // 40 enemies (4 rows x 10 columns)
 /// ```
 #[must_use]
+#[allow(clippy::cast_precision_loss)]
 pub fn generate_wave(wave: u32) -> Vec<Enemy> {
     let rows = 2 + wave as usize;
     let columns = 10;
     let enemy_count = rows * columns;
 
     log::info!(
-        "Generating wave {} with {} enemies ({} rows x {} columns)",
-        wave,
-        enemy_count,
-        rows,
-        columns
+        "Generating wave {wave} with {enemy_count} enemies ({rows} rows x {columns} columns)"
     );
 
     let mut enemies = Vec::with_capacity(enemy_count);
