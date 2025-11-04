@@ -68,8 +68,6 @@ impl HighscoreManager {
         scores
     }
 
-
-
     // Desktop file I/O implementation
     #[cfg(not(target_arch = "wasm32"))]
     fn load_from_file(&self) -> Vec<HighscoreEntry> {

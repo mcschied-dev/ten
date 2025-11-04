@@ -54,7 +54,11 @@ pub fn generate_wave(wave: u32) -> Vec<Enemy> {
 
     for i in 0..columns {
         for (j, &direction) in row_directions.iter().enumerate().take(rows) {
-            enemies.push(Enemy::new(start_x + i as f32 * 60.0, start_y + j as f32 * 50.0, direction));
+            enemies.push(Enemy::new(
+                start_x + i as f32 * 60.0,
+                start_y + j as f32 * 50.0,
+                direction,
+            ));
         }
     }
 

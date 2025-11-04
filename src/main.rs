@@ -1,9 +1,11 @@
 //! BumbleBees - Space Invaders-style arcade shooter
 //! Macroquad edition with WASM support
 
+use macroquad::audio::{
+    load_sound, play_sound, play_sound_once, stop_sound, PlaySoundParams, Sound,
+};
 use macroquad::prelude::*;
-use macroquad::audio::{load_sound, play_sound_once, play_sound, stop_sound, PlaySoundParams, Sound};
-use std::sync::{Arc, Mutex};
+use macroquad::texture::DrawTextureParams;
 
 mod constants;
 mod entities;
@@ -96,6 +98,57 @@ enum GameState {
     GameOver,
 }
 
+/// Represents a single parallax background layer with infinite scrolling
+#[derive(Debug, Clone)]
+struct BackgroundLayer {
+    /// Scroll speed in pixels per second (negative = left, positive = right)
+    speed: f32,
+    /// Two positions for seamless infinite scrolling
+    parts: [f32; 2],
+    /// Layer type for texture selection
+    layer_type: BackgroundLayerType,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum BackgroundLayerType {
+    Sky,
+    Layer10,
+    Clouds,
+    Layer5,
+    FarField,
+    Layer6,
+    NearField,
+    Layer7,
+    Layer8,
+}
+
+impl BackgroundLayer {
+    fn new(speed: f32, texture_width: f32, layer_type: BackgroundLayerType) -> Self {
+        Self {
+            speed,
+            parts: [0.0, texture_width],
+            layer_type,
+        }
+    }
+
+    fn update(&mut self, dt: f32, texture_width: f32) {
+        // Move both parts
+        self.parts[0] += self.speed * dt;
+        self.parts[1] += self.speed * dt;
+
+        // If first part has moved off-screen to the left, reposition it behind the second part
+        if self.parts[1] < 0.0 {
+            self.parts[0] = self.parts[1] + texture_width;
+            // Swap parts so the repositioned one becomes the second
+            self.parts.swap(0, 1);
+        }
+    }
+
+    fn reset(&mut self, texture_width: f32) {
+        self.parts = [0.0, texture_width];
+    }
+}
+
 struct Game {
     player: Player,
     bullets: Vec<Bullet>,
@@ -112,15 +165,24 @@ struct Game {
     highscore_manager: HighscoreManager,
 
     // UI elements
-    scroll_text_x: Arc<Mutex<f32>>,
-    scroll_direction: Arc<Mutex<f32>>,
-    scroll_text_time: f32, // Time accumulator for wobble effect
-    background_scroll_x: f32,
-    background_scroll_x2: f32, // Second layer for parallax
+    // scroll_text_x: Arc<Mutex<f32>>, // Commented out - removed wobbling BumbleBee text
+    // scroll_direction: Arc<Mutex<f32>>, // Commented out - removed wobbling BumbleBee text
+    // scroll_text_time: f32, // Time accumulator for wobble effect // Commented out - removed wobbling BumbleBee text
+    highscore_scroll_offset: f32, // For scrolling highscore list animation
+    background_layers: Vec<BackgroundLayer>,
 
     // Resources
-    background: Texture2D,
-    background2: Texture2D, // Second background layer for parallax
+    sky: Texture2D,
+    clouds: Texture2D,
+    far_field: Texture2D,
+    near_field: Texture2D,
+    layer_5: Texture2D,
+    layer_6: Texture2D,
+    layer_7: Texture2D,
+    layer_8: Texture2D,
+    layer_10: Texture2D,
+    intro_icon: Texture2D,
+    custom_font: Texture2D,
     enemy_image: Texture2D,
 
     // Audio
@@ -133,14 +195,49 @@ impl Game {
     async fn new() -> Self {
         log::info!("Loading game resources");
 
-        let background = load_texture_fallback("resources/background.png")
+        let sky = load_texture_fallback("resources/1.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[0, 0, 0, 255]));
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[135, 206, 235, 255])); // Sky blue fallback
 
-        // Use same background for second layer (could be different image)
-        let background2 = load_texture_fallback("resources/background.png")
+        let clouds = load_texture_fallback("resources/2.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[0, 0, 0, 255]));
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[255, 255, 255, 255]));
+
+        let far_field = load_texture_fallback("resources/3.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[34, 139, 34, 255])); // Forest green fallback
+
+        let near_field = load_texture_fallback("resources/background.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[0, 100, 0, 255])); // Dark green fallback
+
+        let layer_5 = load_texture_fallback("resources/5.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
+
+        let layer_6 = load_texture_fallback("resources/6.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
+
+        let layer_7 = load_texture_fallback("resources/7.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
+
+        let layer_8 = load_texture_fallback("resources/8.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
+
+        let layer_10 = load_texture_fallback("resources/10.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
+
+        let intro_icon = load_texture_fallback("resources/hummel_icns_temp.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[200, 200, 200, 255])); // Light gray fallback
+
+        let custom_font = load_texture_fallback("resources/custom_font.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[255, 255, 255, 255])); // White fallback
 
         let enemy_image = load_texture_fallback("resources/enemy.png")
             .await
@@ -150,7 +247,22 @@ impl Game {
 
         let hit_sound = load_sound_fallback("resources/hit.wav").await.ok();
 
-        let background_music = load_sound_fallback("resources/background_music.wav").await.ok();
+        let background_music = load_sound_fallback("resources/background_music.wav")
+            .await
+            .ok();
+
+        // Initialize background layers for parallax scrolling
+        let background_layers = vec![
+            BackgroundLayer::new(0.0, sky.width(), BackgroundLayerType::Sky), // Static sky
+            BackgroundLayer::new(-10.0, layer_10.width(), BackgroundLayerType::Layer10), // Very slow layer 10
+            BackgroundLayer::new(-20.0, clouds.width(), BackgroundLayerType::Clouds), // Slow clouds
+            BackgroundLayer::new(-50.0, layer_5.width(), BackgroundLayerType::Layer5), // Medium-slow layer 5
+            BackgroundLayer::new(-100.0, far_field.width(), BackgroundLayerType::FarField), // Medium far-field
+            BackgroundLayer::new(-200.0, layer_6.width(), BackgroundLayerType::Layer6), // Medium-fast layer 6
+            BackgroundLayer::new(-300.0, near_field.width(), BackgroundLayerType::NearField), // Fast near-field
+            BackgroundLayer::new(-400.0, layer_7.width(), BackgroundLayerType::Layer7), // Very fast layer 7
+            BackgroundLayer::new(-500.0, layer_8.width(), BackgroundLayerType::Layer8), // Fastest layer 8
+        ];
 
         log::info!("Game state created successfully");
 
@@ -159,20 +271,29 @@ impl Game {
             bullets: Vec::new(),
             enemies: generate_wave(1),
             enemy_speed: INITIAL_ENEMY_SPEED,
-            descent_speed: 100.0, // pixels per second for controlled descent
+            descent_speed: 100.0,  // pixels per second for controlled descent
             descent_distance: 0.0, // current descent progress
             wave_number: 1,
             state: GameState::Menu,
             score: 0,
             player_name: String::new(),
             highscore_manager: HighscoreManager::new("highscores.txt"),
-            scroll_text_x: Arc::new(Mutex::new(SCREEN_WIDTH)),
-            scroll_direction: Arc::new(Mutex::new(-1.0)),
-            scroll_text_time: 0.0,
-            background_scroll_x: 0.0,
-            background_scroll_x2: 0.0,
-            background,
-            background2,
+            // scroll_text_x: Arc::new(Mutex::new(SCREEN_WIDTH)), // Commented out - removed wobbling BumbleBee text
+            // scroll_direction: Arc::new(Mutex::new(-1.0)), // Commented out - removed wobbling BumbleBee text
+            // scroll_text_time: 0.0, // Commented out - removed wobbling BumbleBee text
+            highscore_scroll_offset: 0.0,
+            background_layers,
+            sky,
+            clouds,
+            far_field,
+            near_field,
+            layer_5,
+            layer_6,
+            layer_7,
+            layer_8,
+            layer_10,
+            intro_icon,
+            custom_font,
             enemy_image,
             shoot_sound,
             hit_sound,
@@ -195,13 +316,25 @@ impl Game {
         self.wave_number = 1;
         self.score = 0;
         self.state = GameState::Menu;
-        self.background_scroll_x = 0.0;
-        self.background_scroll_x2 = 0.0;
+        for layer in &mut self.background_layers {
+            let texture_width = match layer.layer_type {
+                BackgroundLayerType::Sky => self.sky.width(),
+                BackgroundLayerType::Layer10 => self.layer_10.width(),
+                BackgroundLayerType::Clouds => self.clouds.width(),
+                BackgroundLayerType::Layer5 => self.layer_5.width(),
+                BackgroundLayerType::FarField => self.far_field.width(),
+                BackgroundLayerType::Layer6 => self.layer_6.width(),
+                BackgroundLayerType::NearField => self.near_field.width(),
+                BackgroundLayerType::Layer7 => self.layer_7.width(),
+                BackgroundLayerType::Layer8 => self.layer_8.width(),
+            };
+            layer.reset(texture_width);
+        }
         self.player_name.clear();
 
-        let mut text_x = self.scroll_text_x.lock().unwrap();
-        *text_x = SCREEN_WIDTH;
-        self.scroll_text_time = 0.0;
+        // let mut text_x = self.scroll_text_x.lock().unwrap(); // Commented out - removed wobbling BumbleBee text
+        // *text_x = SCREEN_WIDTH; // Commented out - removed wobbling BumbleBee text
+        // self.scroll_text_time = 0.0; // Commented out - removed wobbling BumbleBee text
     }
 
     fn start_game(&mut self) {
@@ -218,7 +351,13 @@ impl Game {
             self.descent_distance = 0.0;
             // Start background music
             if let Some(ref sound) = self.background_music {
-                play_sound(sound, PlaySoundParams { looped: true, volume: 0.5 });
+                play_sound(
+                    sound,
+                    PlaySoundParams {
+                        looped: true,
+                        volume: 0.5,
+                    },
+                );
             }
         } else {
             log::warn!("Cannot start game without player name");
@@ -273,8 +412,9 @@ impl Game {
                 let moving_right = enemy.direction > 0.0;
                 let moving_left = enemy.direction < 0.0;
 
-                if (moving_right && enemy.x >= SCREEN_WIDTH - 20.0) ||
-                    (moving_left && enemy.x <= 20.0) {
+                if (moving_right && enemy.x >= SCREEN_WIDTH - 20.0)
+                    || (moving_left && enemy.x <= 20.0)
+                {
                     edge_reached = true;
                     break;
                 }
@@ -341,6 +481,7 @@ impl Game {
         }
     }
 
+    /*
     fn update_scroll_text(&mut self, dt: f32) {
         let mut position = self.scroll_text_x.lock().unwrap();
         let mut direction = self.scroll_direction.lock().unwrap();
@@ -356,20 +497,34 @@ impl Game {
         // Update wobble time accumulator
         self.scroll_text_time += dt;
     }
+    */
+
+    fn update_highscore_scroll(&mut self, dt: f32) {
+        // Scroll highscore list slowly upward (like C64 games)
+        self.highscore_scroll_offset -= 20.0 * dt; // 20 pixels per second
+
+        // Reset scroll when it goes too far (allows for many high scores)
+        if self.highscore_scroll_offset < -2000.0 {
+            // Enough for ~60+ high scores
+            self.highscore_scroll_offset = 50.0; // Reset with some padding
+        }
+    }
 
     fn update_background_scroll(&mut self, dt: f32) {
-        let bg_width = self.background.width();
-
-        // Main background layer (foreground)
-        self.background_scroll_x -= BACKGROUND_SCROLL_SPEED * dt;
-        if self.background_scroll_x <= -bg_width + 1.0 {
-            self.background_scroll_x += bg_width;
-        }
-
-        // Second background layer (background) - moves slower for parallax
-        self.background_scroll_x2 -= BACKGROUND_SCROLL_SPEED * 0.3 * dt; // 30% speed
-        if self.background_scroll_x2 <= -bg_width + 1.0 {
-            self.background_scroll_x2 += bg_width;
+        // Update all background layers
+        for layer in &mut self.background_layers {
+            let texture_width = match layer.layer_type {
+                BackgroundLayerType::Sky => self.sky.width(),
+                BackgroundLayerType::Layer10 => self.layer_10.width(),
+                BackgroundLayerType::Clouds => self.clouds.width(),
+                BackgroundLayerType::Layer5 => self.layer_5.width(),
+                BackgroundLayerType::FarField => self.far_field.width(),
+                BackgroundLayerType::Layer6 => self.layer_6.width(),
+                BackgroundLayerType::NearField => self.near_field.width(),
+                BackgroundLayerType::Layer7 => self.layer_7.width(),
+                BackgroundLayerType::Layer8 => self.layer_8.width(),
+            };
+            layer.update(dt, texture_width);
         }
     }
 
@@ -377,6 +532,7 @@ impl Game {
         match self.state {
             GameState::Menu => {
                 self.update_background_scroll(dt);
+                self.update_highscore_scroll(dt);
             }
             GameState::Playing => {
                 // Handle player input
@@ -391,7 +547,7 @@ impl Game {
                 self.update_background_scroll(dt);
 
                 // Update scrolling text
-                self.update_scroll_text(dt);
+                // self.update_scroll_text(dt); // Commented out - removed wobbling BumbleBee text
 
                 // Update bullets
                 self.update_bullets(dt);
@@ -420,7 +576,7 @@ impl Game {
             }
             GameState::Playing => {
                 self.draw_background();
-                self.draw_scroll_text();
+                // self.draw_scroll_text(); // Commented out - removed wobbling BumbleBee text
                 self.draw_player();
                 self.draw_bullets();
                 self.draw_enemies();
@@ -434,25 +590,33 @@ impl Game {
     }
 
     fn draw_background(&self) {
-        let bg_width = self.background.width();
-        let screen_width = screen_width();
+        // Draw all background layers (from back to front for proper layering)
+        for layer in &self.background_layers {
+            let texture = match layer.layer_type {
+                BackgroundLayerType::Sky => &self.sky,
+                BackgroundLayerType::Layer10 => &self.layer_10,
+                BackgroundLayerType::Clouds => &self.clouds,
+                BackgroundLayerType::Layer5 => &self.layer_5,
+                BackgroundLayerType::FarField => &self.far_field,
+                BackgroundLayerType::Layer6 => &self.layer_6,
+                BackgroundLayerType::NearField => &self.near_field,
+                BackgroundLayerType::Layer7 => &self.layer_7,
+                BackgroundLayerType::Layer8 => &self.layer_8,
+            };
 
-        // Calculate how many background instances we need to cover the screen
-        let instances_needed = ((screen_width / bg_width).ceil() as i32) + 2;
-
-        // Draw background layer (slower, more transparent, normal orientation)
-        for i in -1..instances_needed {
-            let x_pos = self.background_scroll_x2 + (i as f32 * bg_width);
-            draw_texture(&self.background2, x_pos, 0.0, Color::from_rgba(255, 255, 255, 180));
-        }
-
-        // Draw foreground layer (faster, fully opaque, normal orientation)
-        for i in -1..instances_needed {
-            let x_pos = self.background_scroll_x + (i as f32 * bg_width);
-            draw_texture(&self.background, x_pos, 0.0, WHITE);
+            // Only scroll layers that have speed > 0 (non-static layers)
+            if layer.speed != 0.0 {
+                for &x_pos in &layer.parts {
+                    draw_texture(texture, x_pos, 0.0, WHITE);
+                }
+            } else {
+                // Static sky layer - just draw once
+                draw_texture(texture, 0.0, 0.0, WHITE);
+            }
         }
     }
 
+    /*
     fn draw_scroll_text(&self) {
         let text_x = *self.scroll_text_x.lock().unwrap();
 
@@ -489,6 +653,7 @@ impl Game {
             draw_text("BumbleBee - The Game", text_x, text_y, font_size, text_color);
         }
     }
+    */
 
     fn draw_player(&self) {
         let player_x = self.player.x - self.player.base_width / 2.0;
@@ -516,8 +681,76 @@ impl Game {
         }
     }
 
+    /// Draw text using the custom pixel font texture
+    ///
+    /// This function renders text using a custom 8x8 pixel font stored in a texture atlas.
+    /// The font contains A-Z, 0-9, dash (-), and period (.) characters arranged in a 16x4 grid.
+    ///
+    /// # Arguments
+    /// * `text` - The text string to render
+    /// * `x` - X coordinate for text positioning
+    /// * `y` - Y coordinate for text positioning
+    /// * `scale` - Scale factor for font size (1.0 = 8x8 pixels per character)
+    /// * `color` - Color to tint the font (white pixels in font become this color)
+    fn draw_custom_text(&self, text: &str, x: f32, y: f32, scale: f32, color: Color) {
+        let char_width = 8.0; // Assuming 8x8 pixel characters
+        let char_height = 8.0;
+        let chars_per_row = 16; // Assuming 16 characters per row in the font texture
+
+        let mut current_x = x;
+
+        for ch in text.chars() {
+            if ch == ' ' {
+                current_x += char_width * scale;
+                continue;
+            }
+
+            // Convert character to index (assuming ASCII, A-Z, 0-9, etc.)
+            let char_index = if ch.is_ascii_alphanumeric() || ch == '-' || ch == '.' {
+                match ch {
+                    '0'..='9' => (ch as u32 - '0' as u32) as usize,
+                    'A'..='Z' => (ch as u32 - 'A' as u32 + 10) as usize,
+                    'a'..='z' => (ch as u32 - 'a' as u32 + 10) as usize,
+                    '-' => 36,
+                    '.' => 37,
+                    _ => 0, // Default to '0'
+                }
+            } else {
+                0
+            };
+
+            // Calculate position in font texture
+            let tex_x = (char_index % chars_per_row) as f32 * char_width;
+            let tex_y = (char_index / chars_per_row) as f32 * char_height;
+
+            // Draw the character with the specified color
+            draw_texture_ex(
+                &self.custom_font,
+                current_x,
+                y,
+                color,
+                DrawTextureParams {
+                    source: Some(Rect::new(tex_x, tex_y, char_width, char_height)),
+                    dest_size: Some(Vec2::new(char_width * scale, char_height * scale)),
+                    ..Default::default()
+                },
+            );
+
+            current_x += char_width * scale;
+        }
+    }
+
     fn draw_menu(&self) {
-        // Title
+        // Draw parallax backgrounds
+        self.draw_background();
+
+        // Draw intro icon as extra layer (only visible in menu)
+        let icon_x = 30.0; // 30px from left edge
+        let icon_y = 30.0; // 30px from top edge
+        draw_texture(&self.intro_icon, icon_x, icon_y, WHITE);
+
+        // Title - commented out
+        /*
         let title = "BumbleBees";
         let title_size = 80.0;
         let title_dims = measure_text(title, None, title_size as u16, 1.0);
@@ -528,36 +761,65 @@ impl Game {
             title_size,
             Color::from_rgba(255, 215, 0, 255),
         );
+        */
 
-        // Highscores section
-        draw_text(
+        // Highscores section - using custom font (moved to top)
+        self.draw_custom_text(
             "HIGH SCORES",
-            SCREEN_WIDTH / 2.0 - 150.0,
-            180.0,
-            40.0,
-            WHITE,
+            SCREEN_WIDTH / 2.0 - 148.0, // Back to original positioning
+            52.0,                       // Moved to top
+            2.0,                        // Back to normal size
+            Color::from_rgba(0, 0, 0, 128),
+        );
+        self.draw_custom_text(
+            "HIGH SCORES",
+            SCREEN_WIDTH / 2.0 - 150.0, // Back to original positioning
+            50.0,                       // Moved to top
+            2.0,                        // Back to normal size
+            BLACK,
         );
 
-        // Display top 10 highscores
-        let top_scores = self.highscore_manager.get_top_scores(10);
+        // Display all highscores with scrolling animation (C64 style)
+        let top_scores = self.highscore_manager.get_top_scores(usize::MAX);
         for (i, entry) in top_scores.iter().enumerate() {
             let score_text = format!("{}. {} - {}", i + 1, entry.name, entry.score);
-            draw_text(
-                &score_text,
-                SCREEN_WIDTH / 2.0 - 180.0,
-                220.0 + i as f32 * 30.0,
-                24.0,
-                Color::from_rgba(200, 200, 200, 255),
-            );
+            let y_pos = 90.0 + i as f32 * 30.0 + self.highscore_scroll_offset; // Back to original spacing
+
+            // Only draw if visible on screen (adjusted for top position)
+            if y_pos > 40.0 && y_pos < 500.0 {
+                // Draw shadow for bold effect
+                self.draw_custom_text(
+                    &score_text,
+                    SCREEN_WIDTH / 2.0 - 178.0, // Back to original positioning
+                    y_pos + 2.0,                // Back to original shadow offset
+                    1.5,                        // Back to normal size
+                    Color::from_rgba(0, 0, 0, 128),
+                );
+                self.draw_custom_text(
+                    &score_text,
+                    SCREEN_WIDTH / 2.0 - 180.0, // Back to original positioning
+                    y_pos,
+                    1.5,   // Back to normal size
+                    BLACK, // Changed to black
+                );
+            }
         }
 
         // Name input section
+        // Draw shadow for bold effect
+        draw_text(
+            "Enter Your Name:",
+            SCREEN_WIDTH / 2.0 - 138.0,
+            562.0,
+            30.0,
+            Color::from_rgba(0, 0, 0, 128),
+        );
         draw_text(
             "Enter Your Name:",
             SCREEN_WIDTH / 2.0 - 140.0,
             560.0,
             30.0,
-            WHITE,
+            BLACK,
         );
 
         // Name input box
@@ -569,7 +831,7 @@ impl Game {
             SCREEN_WIDTH / 2.0 - 140.0,
             625.0,
             28.0,
-            WHITE,
+            BLACK,
         );
 
         // Start button
@@ -603,7 +865,13 @@ impl Game {
         let score_text = format!("Score: {}", self.score);
 
         // Draw shadow for bold effect
-        draw_text(&score_text, SCREEN_WIDTH - 178.0, 42.0, 32.0, Color::from_rgba(0, 0, 0, 128));
+        draw_text(
+            &score_text,
+            SCREEN_WIDTH - 178.0,
+            42.0,
+            32.0,
+            Color::from_rgba(0, 0, 0, 128),
+        );
 
         // Draw main text in red with larger font for bold effect
         draw_text(&score_text, SCREEN_WIDTH - 180.0, 40.0, 32.0, RED);
@@ -758,6 +1026,4 @@ mod tests {
         assert_eq!(enemies[3].x, 302.0); // Next column
         assert_eq!(enemies[3].y, 50.0); // First row
     }
-
-
 }

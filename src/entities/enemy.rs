@@ -40,8 +40,6 @@ impl Enemy {
         self.x += self.direction * speed * dt;
     }
 
-
-
     /// Check if enemy has reached the screen edge.
     #[must_use]
     pub fn has_reached_edge(&self) -> bool {

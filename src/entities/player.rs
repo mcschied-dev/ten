@@ -185,9 +185,15 @@ mod tests {
         assert_eq!(bullets.len(), 3);
 
         // Check bullet positions are spread across player width
-        assert_eq!(bullets[0].x, player.x - player.base_width / 2.0 + player.base_width / 4.0);
+        assert_eq!(
+            bullets[0].x,
+            player.x - player.base_width / 2.0 + player.base_width / 4.0
+        );
         assert_eq!(bullets[1].x, player.x);
-        assert_eq!(bullets[2].x, player.x + player.base_width / 2.0 - player.base_width / 4.0);
+        assert_eq!(
+            bullets[2].x,
+            player.x + player.base_width / 2.0 - player.base_width / 4.0
+        );
     }
 
     #[test]
@@ -202,6 +208,9 @@ mod tests {
         // Test extreme right
         player.x = 2000.0;
         player.clamp_position();
-        assert_eq!(player.x, crate::constants::SCREEN_WIDTH - player.base_width / 2.0);
+        assert_eq!(
+            player.x,
+            crate::constants::SCREEN_WIDTH - player.base_width / 2.0
+        );
     }
 }

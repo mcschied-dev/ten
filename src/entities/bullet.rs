@@ -85,7 +85,7 @@ mod tests {
     fn test_bullet_within_bounds_center() {
         let bullet = Bullet::new(
             crate::constants::SCREEN_WIDTH / 2.0,
-            crate::constants::SCREEN_HEIGHT / 2.0
+            crate::constants::SCREEN_HEIGHT / 2.0,
         );
         assert!(!bullet.is_out_of_bounds());
     }
