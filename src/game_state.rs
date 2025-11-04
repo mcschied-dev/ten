@@ -162,16 +162,9 @@ impl MainState {
         }
     }
 
-    /// Save highscore and return to menu.
-    pub fn save_and_return_to_menu(&mut self, ctx: &mut Context) {
-        // Save highscore
-        if !self.player_name.is_empty() && self.score > 0 {
-            log::info!("Saving highscore: {} - {}", self.player_name, self.score);
-            self.highscore_manager
-                .save_highscore(&self.player_name, self.score);
-        }
-
-        // Return to menu
+    /// Return to menu (highscore already saved on game over).
+    pub fn return_to_menu(&mut self, ctx: &mut Context) {
+        log::info!("Returning to menu");
         self.reset(ctx);
     }
 
@@ -361,7 +354,7 @@ impl EventHandler for MainState {
             GameState::GameOver => {
                 if let Some(keycode) = input.keycode {
                     if keycode == KeyCode::R {
-                        self.save_and_return_to_menu(ctx);
+                        self.return_to_menu(ctx);
                     }
                 }
             }

@@ -18,13 +18,12 @@ use crate::game_state::{GameState, MainState};
 pub fn draw_game(state: &MainState, ctx: &mut Context) -> GameResult {
     let mut canvas = Canvas::from_frame(ctx, Color::BLACK);
 
-    draw_background(&mut canvas, state);
-
     match state.state {
         GameState::Menu => {
             draw_menu(&mut canvas, state, ctx)?;
         }
         GameState::Playing => {
+            draw_background(&mut canvas, state);
             draw_scroll_text(&mut canvas, state);
             draw_player(&mut canvas, state, ctx)?;
             draw_bullets(&mut canvas, &state.bullets, ctx)?;
@@ -32,6 +31,7 @@ pub fn draw_game(state: &MainState, ctx: &mut Context) -> GameResult {
             draw_score(&mut canvas, state.score);
         }
         GameState::GameOver => {
+            draw_background(&mut canvas, state);
             draw_game_over(&mut canvas, state.score);
         }
     }

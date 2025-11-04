@@ -232,10 +232,10 @@ Resource paths use leading `/` (e.g., `/background.png`) which maps to `resource
 - `start_game()`: Transition from menu to playing (logged)
 - `shoot()`: Create bullets based on player shots
 - `update_bullets()`: Move bullets and remove out-of-bounds
-- `update_enemies()`: Handle enemy movement and edge detection (logs breaches)
+- `update_enemies()`: Handle enemy movement and edge detection (logs breaches, saves highscore on game over)
 - `update_collisions()`: Process bullet-enemy collisions
 - `check_wave_complete()`: Spawn next wave if enemies cleared (logged)
-- `save_and_return_to_menu()`: Save highscore and return to menu
+- `return_to_menu()`: Return to menu (highscore already saved on game over)
 
 ### Constants
 
