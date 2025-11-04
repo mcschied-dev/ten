@@ -1,22 +1,30 @@
-# 🐝 BumbleBees
+# 🐝 BumbleBees - The Game
 
-A classic Space Invaders-style arcade shooter built in Rust with the macroquad game engine. Battle against increasingly difficult waves of enemies with a dynamic parallax scrolling background and comprehensive highscore tracking. Supports both desktop and web (WASM) platforms.
+A retro-styled Space Invaders arcade shooter built in Rust with macroquad. Features authentic Space Invaders movement patterns, C64-inspired visual effects, and comprehensive gameplay with progressive difficulty. Supports both desktop and web (WASM) platforms.
 
-![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows%20%7C%20Web-lightgrey)
 ![Rust](https://img.shields.io/badge/rust-1.70%2B-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+![Game Engine](https://img.shields.io/badge/engine-macroquad%200.4-blue)
 
 ## ✨ Features
 
-- **Progressive Difficulty**: Each wave brings more enemies and faster movement
-- **Dynamic Gameplay**:
-  - Player's firepower increases with each wave cleared
-  - Enemy speed increases progressively
-  - Wider player base to accommodate more simultaneous shots
+### 🎮 Core Gameplay
+- **Authentic Space Invaders Movement**: Enemies move as a formation, reverse direction when any enemy hits edge, and descend together
+- **Centered Enemy Formations**: Enemy waves appear perfectly centered at the top of the screen
+- **Progressive Difficulty**: Each wave adds more enemy rows and increases speed
+- **Player Upgrades**: Wider ship and more simultaneous shots per wave completed
+
+### 🎨 Retro Visual Effects
+- **C64-Style Scrolling Text**: "BumbleBee - The Game" with rainbow colors, blinking, wobbling, and large bitmap-style letters
+- **Red Bold Score Display**: Prominent red score text with shadow effect during gameplay
 - **Parallax Scrolling Background**: Smooth right-to-left scrolling creates depth
+- **Classic Arcade Aesthetics**: Retro-styled graphics and animations
+
+### 🏆 Game Systems
 - **Highscore System**:
   - Persistent storage across game sessions
-  - Top 10 leaderboard displayed on main menu
+  - Top 10 leaderboard on main menu
   - Automatic score saving on game over
 - **Interactive Menu**:
   - Enter your name before playing
@@ -25,16 +33,20 @@ A classic Space Invaders-style arcade shooter built in Rust with the macroquad g
 - **Audio**: Background music and sound effects for shooting and hits
 - **Comprehensive Logging**: Debug logging system for troubleshooting
 
+### 🌐 Cross-Platform Support
+- **Desktop**: macOS, Linux, Windows
+- **Web**: Full WASM support for browser play
+
 ## 🎮 How to Play
 
 ### Starting the Game
 
 1. Launch the game
 2. You'll see the **BumbleBees** main menu with:
-   - Game title in golden text
-   - Top 10 highscores (if any exist)
-   - Name input field
-   - Start button
+    - **"BumbleBee - The Game"** scrolling text with C64-style rainbow effects
+    - Top 10 highscores (if any exist)
+    - Name input field
+    - Start button
 
 3. **Enter your name** in the input field (alphanumeric characters, max 20 chars)
 4. Press **Enter** or click the **START GAME** button
@@ -80,11 +92,13 @@ After completing each wave, you gain:
 - Bullets are evenly spaced across your base width
 
 #### Enemy Behavior
-- Enemies move horizontally across the screen
-- When reaching a screen edge, they:
-  - Reverse direction
-  - Move down 40 pixels
-- If any enemy crosses the defender line → **GAME OVER**
+- **Authentic Space Invaders Movement**: Enemies move as a unified formation
+- **Formation Movement**: When ANY enemy reaches a screen edge, the entire wave:
+  - Reverses direction
+  - Moves down 40 pixels smoothly
+- **Centered Formations**: Enemy waves start perfectly centered at the top
+- **Alternating Directions**: Row 0 moves right, Row 1 moves left, Row 2 moves right, etc.
+- **Game Over**: If any enemy crosses the defender line → **GAME OVER**
 
 #### Difficulty Scaling
 - Enemy speed increases by **20 pixels/second** per wave
@@ -125,29 +139,56 @@ cargo run          # Development
 cargo run --release # Release (recommended for gameplay)
 ```
 
+### Web (WASM) Deployment
+
+```bash
+# Install wasm32 target
+rustup target add wasm32-unknown-unknown
+
+# Build for web
+cargo build --release --target wasm32-unknown-unknown
+
+# Serve locally (requires basic HTTP server)
+python3 -m http.server 8000
+# Then visit http://localhost:8000 in your browser
+```
+
+The game includes `index.html` and `wasm-status.html` for web deployment.
+
 ## 📁 Project Structure
 
 ```
 ten/
 ├── src/
-│   ├── main.rs          # Entry point
+│   ├── main.rs          # Entry point and game loop
 │   ├── lib.rs           # Library exports
-│   ├── constants.rs     # Game constants
-│   ├── logger.rs        # Logging system
-│   ├── entities/        # Game entities (Player, Enemy, Bullet)
-│   ├── systems/         # Game systems (collision, wave generation)
-│   ├── game_state.rs    # Core game loop and state management
-│   ├── highscore.rs     # Highscore persistence
-│   └── rendering.rs     # All rendering logic
+│   ├── constants.rs     # Game constants and configuration
+│   ├── entities/        # Game entities
+│   │   ├── mod.rs       # Entity module exports
+│   │   ├── player.rs    # Player entity and logic
+│   │   ├── enemy.rs     # Enemy entity and logic
+│   │   └── bullet.rs    # Bullet entity and logic
+│   ├── systems/         # Game systems
+│   │   ├── mod.rs       # System module exports
+│   │   ├── collision.rs # Collision detection
+│   │   └── wave.rs      # Enemy wave generation
+│   ├── highscore.rs     # Highscore persistence system
+│   └── entities.rs      # Entity re-exports (legacy)
 ├── resources/           # Game assets
 │   ├── background.png   # Parallax background
 │   ├── enemy.png        # Enemy sprite
 │   ├── shoot.wav        # Shooting sound effect
 │   ├── hit.wav          # Hit sound effect
-│   └── background_music.wav
-├── Cargo.toml          # Rust dependencies
-├── CLAUDE.md           # Developer documentation
-└── README.md           # This file
+│   ├── background_music.wav
+│   └── background_old.png
+├── assets/              # Additional assets
+│   └── icon.icns        # macOS application icon
+├── Cargo.toml           # Rust dependencies and metadata
+├── CLAUDE.md            # Developer documentation
+├── AGENTS.md            # Build/lint/test commands reference
+├── index.html           # Web deployment HTML
+├── wasm-status.html     # WASM status page
+└── README.md            # This file
 ```
 
 ## 🛠️ Development
@@ -271,11 +312,13 @@ Place your own assets in the `resources/` directory:
 ## 📝 Technical Details
 
 - **Language**: Rust (Edition 2021)
-- **Game Engine**: macroquad 0.4
-- **Audio**: macroquad audio system
-- **Logging**: log + fern + chrono
-- **Graphics**: OpenGL/Metal via wgpu
-- **Supported Platforms**: macOS, Linux, Windows
+- **Game Engine**: macroquad 0.4 (WASM-compatible 2D graphics)
+- **Audio**: macroquad audio system (WAV format)
+- **Graphics**: OpenGL/Metal/Vulkan via wgpu
+- **Cross-Platform**: Desktop (macOS, Linux, Windows) + Web (WASM)
+- **Build System**: Cargo with conditional compilation for WASM
+- **Testing**: Comprehensive unit tests (39 tests passing)
+- **Code Quality**: Clippy-clean with generated documentation
 
 ## 🔧 Advanced Configuration
 
@@ -312,16 +355,23 @@ This project is available under the MIT License.
 
 - Built with [macroquad](https://macroquad.rs/) - A Rust library for making 2D games with WASM support
 - Inspired by the classic Space Invaders arcade game
+- C64-style visual effects inspired by Commodore 64 demos
 - Audio and graphics assets created for this project
+- Space Invaders movement patterns based on original arcade behavior
 
 ## 📚 Additional Resources
 
 - [CLAUDE.md](CLAUDE.md) - Comprehensive developer documentation
+- [AGENTS.md](AGENTS.md) - Build/lint/test commands reference
 - [Cargo.toml](Cargo.toml) - Rust dependencies and project metadata
 - `debug.log` - Detailed runtime logs for debugging
+- `index.html` - Web deployment entry point
+- `wasm-status.html` - WASM build status page
 
 ---
 
-**Enjoy playing BumbleBees!** 🐝 🎮
+**Enjoy playing BumbleBees - The Game!** 🐝 🎮
 
-For bugs, features, or questions, please open an issue or contact @mcschied.
+Experience authentic Space Invaders gameplay with modern C64-inspired visual effects. Battle enemy formations with progressive difficulty, earn high scores, and enjoy smooth cross-platform gameplay!
+
+For bugs, features, or questions, please open an issue on GitHub.
