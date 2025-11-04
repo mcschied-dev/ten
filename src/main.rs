@@ -320,7 +320,7 @@ impl EventHandler for MainState {
         Ok(())
     }
 }
-
+// Main Function
 fn main() -> GameResult {
     // Ressourcenpfad ermitteln basierend auf dem Projektstammverzeichnis
     let resources_dir = format!("{}/resources", env!("CARGO_MANIFEST_DIR"));
