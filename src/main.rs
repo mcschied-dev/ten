@@ -388,8 +388,8 @@ impl Game {
 
         // Draw shadow for bitmap effect
         if blink_visible {
-            draw_text("Happy New Year", text_x + 2.0, text_y + 2.0, font_size, Color::from_rgba(0, 0, 0, 128));
-            draw_text("Happy New Year", text_x, text_y, font_size, text_color);
+            draw_text("BumbleBee - The Game", text_x + 2.0, text_y + 2.0, font_size, Color::from_rgba(0, 0, 0, 128));
+            draw_text("BumbleBee - The Game", text_x, text_y, font_size, text_color);
         }
     }
 
