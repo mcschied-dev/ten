@@ -7,9 +7,9 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [package.metadata.bundle]
-name = "Hummel"
-identifier = "com.mcschied.hummel"
-icon = ["assets/icon.icns"] 
+name = "BumbleBees"
+identifier = "com.mcschied.bumblebees"
+icon = ["assets/icon.icns"]
 resources = ["resources"]   
 
 [dependencies]
