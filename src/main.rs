@@ -116,9 +116,11 @@ struct Game {
     scroll_direction: Arc<Mutex<f32>>,
     scroll_text_time: f32, // Time accumulator for wobble effect
     background_scroll_x: f32,
+    background_scroll_x2: f32, // Second layer for parallax
 
     // Resources
     background: Texture2D,
+    background2: Texture2D, // Second background layer for parallax
     enemy_image: Texture2D,
 
     // Audio
@@ -132,6 +134,11 @@ impl Game {
         log::info!("Loading game resources");
 
         let background = load_texture_fallback("resources/background.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[0, 0, 0, 255]));
+
+        // Use same background for second layer (could be different image)
+        let background2 = load_texture_fallback("resources/background.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[0, 0, 0, 255]));
 
@@ -163,7 +170,9 @@ impl Game {
             scroll_direction: Arc::new(Mutex::new(-1.0)),
             scroll_text_time: 0.0,
             background_scroll_x: 0.0,
+            background_scroll_x2: 0.0,
             background,
+            background2,
             enemy_image,
             shoot_sound,
             hit_sound,
@@ -187,6 +196,7 @@ impl Game {
         self.score = 0;
         self.state = GameState::Menu;
         self.background_scroll_x = 0.0;
+        self.background_scroll_x2 = 0.0;
         self.player_name.clear();
 
         let mut text_x = self.scroll_text_x.lock().unwrap();
@@ -348,10 +358,18 @@ impl Game {
     }
 
     fn update_background_scroll(&mut self, dt: f32) {
-        self.background_scroll_x -= BACKGROUND_SCROLL_SPEED * dt;
         let bg_width = self.background.width();
-        if self.background_scroll_x <= -bg_width {
+
+        // Main background layer (foreground)
+        self.background_scroll_x -= BACKGROUND_SCROLL_SPEED * dt;
+        if self.background_scroll_x <= -bg_width + 1.0 {
             self.background_scroll_x += bg_width;
+        }
+
+        // Second background layer (background) - moves slower for parallax
+        self.background_scroll_x2 -= BACKGROUND_SCROLL_SPEED * 0.3 * dt; // 30% speed
+        if self.background_scroll_x2 <= -bg_width + 1.0 {
+            self.background_scroll_x2 += bg_width;
         }
     }
 
@@ -417,17 +435,22 @@ impl Game {
 
     fn draw_background(&self) {
         let bg_width = self.background.width();
+        let screen_width = screen_width();
 
-        // Draw first instance
-        draw_texture(&self.background, self.background_scroll_x, 0.0, WHITE);
+        // Calculate how many background instances we need to cover the screen
+        let instances_needed = ((screen_width / bg_width).ceil() as i32) + 2;
 
-        // Draw second instance for seamless scrolling
-        draw_texture(
-            &self.background,
-            self.background_scroll_x + bg_width,
-            0.0,
-            WHITE,
-        );
+        // Draw background layer (slower, more transparent)
+        for i in -1..instances_needed {
+            let x_pos = self.background_scroll_x2 + (i as f32 * bg_width);
+            draw_texture(&self.background2, x_pos, 0.0, Color::from_rgba(255, 255, 255, 180)); // 70% opacity
+        }
+
+        // Draw foreground layer (faster, fully opaque)
+        for i in -1..instances_needed {
+            let x_pos = self.background_scroll_x + (i as f32 * bg_width);
+            draw_texture(&self.background, x_pos, 0.0, WHITE);
+        }
     }
 
     fn draw_scroll_text(&self) {
