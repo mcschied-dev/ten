@@ -1,5 +1,6 @@
 //! Wave generation system.
 
+use crate::constants::SCREEN_WIDTH;
 use crate::entities::Enemy;
 
 /// Generate enemies for a given wave number.
@@ -38,9 +39,23 @@ pub fn generate_wave(wave: u32) -> Vec<Enemy> {
 
     let mut enemies = Vec::with_capacity(enemy_count);
 
+    // Generate alternating directions for each row (-1.0 for left, 1.0 for right)
+    // Row 0: right, Row 1: left, Row 2: right, Row 3: left, etc.
+    let mut row_directions = Vec::with_capacity(rows);
+    for row_idx in 0..rows {
+        let direction = if row_idx % 2 == 0 { 1.0 } else { -1.0 };
+        row_directions.push(direction);
+    }
+
+    // Center the formation horizontally and position at top of screen
+    let formation_width = (columns - 1) as f32 * 60.0;
+    let start_x = (SCREEN_WIDTH - formation_width) / 2.0;
+    let start_y = 50.0; // Position at top of screen
+
     for i in 0..columns {
         for j in 0..rows {
-            enemies.push(Enemy::new(50.0 + i as f32 * 60.0, 100.0 + j as f32 * 50.0));
+            let direction = row_directions[j];
+            enemies.push(Enemy::new(start_x + i as f32 * 60.0, start_y + j as f32 * 50.0, direction));
         }
     }
 
@@ -69,18 +84,21 @@ mod tests {
     fn test_generate_enemies_positions() {
         let enemies = generate_wave(1);
 
-        // Check first enemy position
-        assert_eq!(enemies[0].x, 50.0);
-        assert_eq!(enemies[0].y, 100.0);
+        // Formation is centered horizontally: (1024.0 - 540.0) / 2.0 = 242.0
+        // Positioned at top: y = 50.0
+
+        // Check first enemy position (top-left of formation)
+        assert_eq!(enemies[0].x, 242.0);
+        assert_eq!(enemies[0].y, 50.0);
 
         // Check that enemies are spaced properly vertically (same column, next row)
-        assert_eq!(enemies[1].x, 50.0);
-        assert_eq!(enemies[1].y, 150.0); // 100.0 + 50.0
+        assert_eq!(enemies[1].x, 242.0);
+        assert_eq!(enemies[1].y, 100.0); // 50.0 + 50.0
 
         // Check enemies are spaced horizontally (next column, first row)
         // Wave 1 has 3 rows, so enemies[3] is first enemy of second column
-        assert_eq!(enemies[3].x, 110.0); // 50.0 + 60.0
-        assert_eq!(enemies[3].y, 100.0);
+        assert_eq!(enemies[3].x, 302.0); // 242.0 + 60.0
+        assert_eq!(enemies[3].y, 50.0);
     }
 
     #[test]
@@ -104,12 +122,12 @@ mod tests {
         // Wave 2 has 4 rows
         assert_eq!(enemies.len(), 40);
 
-        // Check positions are still valid
-        assert_eq!(enemies[0].x, 50.0);
-        assert_eq!(enemies[0].y, 100.0);
+        // Check positions are still valid (centered at x=242.0, y=50.0)
+        assert_eq!(enemies[0].x, 242.0);
+        assert_eq!(enemies[0].y, 50.0);
 
         // Last enemy in first column should be at row 4
-        assert_eq!(enemies[3].x, 50.0);
-        assert_eq!(enemies[3].y, 250.0); // 100 + 3 * 50
+        assert_eq!(enemies[3].x, 242.0);
+        assert_eq!(enemies[3].y, 200.0); // 50 + 3 * 50
     }
 }

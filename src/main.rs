@@ -26,12 +26,12 @@ struct Game {
     player: Player,
     bullets: Vec<Bullet>,
     enemies: Vec<Enemy>,
-    enemy_direction: f32,
     enemy_speed: f32,
+    descent_speed: f32,
+    descent_distance: f32, // how much enemies need to descend
     wave_number: u32,
     state: GameState,
     score: u32,
-    moved_down: bool,
 
     // Player and highscore
     player_name: String,
@@ -76,12 +76,12 @@ impl Game {
             player: Player::new(),
             bullets: Vec::new(),
             enemies: generate_wave(1),
-            enemy_direction: 1.0,
             enemy_speed: INITIAL_ENEMY_SPEED,
+            descent_speed: 100.0, // pixels per second for controlled descent
+            descent_distance: 0.0, // current descent progress
             wave_number: 1,
             state: GameState::Menu,
             score: 0,
-            moved_down: false,
             player_name: String::new(),
             highscore_manager: HighscoreManager::new("highscores.txt"),
             scroll_text_x: Arc::new(Mutex::new(SCREEN_WIDTH)),
@@ -104,11 +104,11 @@ impl Game {
         self.player.reset();
         self.bullets.clear();
         self.enemies = generate_wave(1);
-        self.enemy_direction = 1.0;
         self.enemy_speed = INITIAL_ENEMY_SPEED;
+        self.descent_speed = 100.0;
+        self.descent_distance = 0.0;
         self.wave_number = 1;
         self.score = 0;
-        self.moved_down = false;
         self.state = GameState::Menu;
         self.background_scroll_x = 0.0;
         self.player_name.clear();
@@ -126,9 +126,9 @@ impl Game {
             self.enemies = generate_wave(1);
             self.bullets.clear();
             self.player.reset();
-            self.enemy_direction = 1.0;
             self.enemy_speed = INITIAL_ENEMY_SPEED;
-            self.moved_down = false;
+            self.descent_speed = 100.0;
+            self.descent_distance = 0.0;
             // Start background music
             if let Some(ref sound) = self.background_music {
                 play_sound(sound, PlaySoundParams { looped: true, volume: 0.5 });
@@ -158,40 +158,73 @@ impl Game {
     }
 
     fn update_enemies(&mut self, dt: f32) {
-        let mut reached_edge = false;
+        // Handle gradual descent if active
+        if self.descent_distance > 0.0 {
+            let descent_this_frame = self.descent_speed * dt;
+            if descent_this_frame >= self.descent_distance {
+                // Complete the descent
+                for enemy in &mut self.enemies {
+                    enemy.y += self.descent_distance;
+                }
+                self.descent_distance = 0.0;
+            } else {
+                // Continue descending
+                for enemy in &mut self.enemies {
+                    enemy.y += descent_this_frame;
+                }
+                self.descent_distance -= descent_this_frame;
+            }
+        } else {
+            // Normal horizontal movement when not descending
+            for enemy in &mut self.enemies {
+                enemy.update(self.enemy_speed, dt);
+            }
 
-        for enemy in &mut self.enemies {
-            enemy.update(self.enemy_direction, self.enemy_speed, dt);
-            if enemy.has_reached_edge() {
-                reached_edge = true;
+            // Check if any enemy has reached the edge it's moving toward
+            let mut edge_reached = false;
+            for enemy in &self.enemies {
+                let moving_right = enemy.direction > 0.0;
+                let moving_left = enemy.direction < 0.0;
+
+                if (moving_right && enemy.x >= SCREEN_WIDTH - 20.0) ||
+                    (moving_left && enemy.x <= 20.0) {
+                    edge_reached = true;
+                    break;
+                }
+            }
+
+            if edge_reached {
+                log::info!("Enemy reached edge - reversing direction and starting descent");
+
+                // Reverse ALL directions
+                for enemy in &mut self.enemies {
+                    enemy.direction *= -1.0;
+                    // Move back into bounds
+                    if enemy.x < 20.0 {
+                        enemy.x = 20.0;
+                    } else if enemy.x > SCREEN_WIDTH - 20.0 {
+                        enemy.x = SCREEN_WIDTH - 20.0;
+                    }
+                }
+
+                // Start controlled descent for the entire wave
+                self.descent_distance = 40.0;
             }
         }
 
-        if reached_edge && !self.moved_down {
-            self.enemy_direction *= -1.0;
-            self.moved_down = true;
-
-            for enemy in &mut self.enemies {
-                enemy.move_down(40.0);
-
-                if enemy.has_breached_defender_line() {
-                    log::warn!("Enemy breached defender line at y={}, game over!", enemy.y);
-                    self.state = GameState::GameOver;
-                    // Stop background music
-                    if let Some(ref sound) = self.background_music {
-                        stop_sound(sound);
-                    }
-                    // Save highscore immediately when game over
-                    if !self.player_name.is_empty() && self.score > 0 {
-                        log::info!("Game over! Final score: {}", self.score);
-                        self.highscore_manager
-                            .save_highscore(&self.player_name, self.score);
-                    }
-                    return;
+        // Check if any enemy has breached the defender line
+        for enemy in &self.enemies {
+            if enemy.has_breached_defender_line() {
+                log::warn!("Enemy breached defender line at y={}, game over!", enemy.y);
+                self.state = GameState::GameOver;
+                // Save highscore immediately when game over
+                if !self.player_name.is_empty() && self.score > 0 {
+                    log::info!("Game over! Final score: {}", self.score);
+                    self.highscore_manager
+                        .save_highscore(&self.player_name, self.score);
                 }
+                return;
             }
-        } else if !reached_edge {
-            self.moved_down = false;
         }
     }
 
@@ -574,16 +607,16 @@ mod tests {
     fn test_enemy_positions_in_wave() {
         let enemies = generate_wave(1);
 
-        // Check first enemy position
-        assert_eq!(enemies[0].x, 50.0);
-        assert_eq!(enemies[0].y, 100.0);
+        // Check first enemy position (centered at top)
+        assert_eq!(enemies[0].x, 242.0);
+        assert_eq!(enemies[0].y, 50.0);
 
         // Check enemy spacing
-        assert_eq!(enemies[1].x, 50.0); // Same column
-        assert_eq!(enemies[1].y, 150.0); // Next row
+        assert_eq!(enemies[1].x, 242.0); // Same column
+        assert_eq!(enemies[1].y, 100.0); // Next row
 
-        assert_eq!(enemies[3].x, 110.0); // Next column
-        assert_eq!(enemies[3].y, 100.0); // First row
+        assert_eq!(enemies[3].x, 302.0); // Next column
+        assert_eq!(enemies[3].y, 50.0); // First row
     }
 
     #[test]

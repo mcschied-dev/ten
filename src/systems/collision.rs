@@ -51,14 +51,14 @@ mod tests {
 
     #[test]
     fn test_bullet_collision_detection() {
-        let enemy = Enemy::new(100.0, 200.0);
+        let enemy = Enemy::new(100.0, 200.0, 1.0);
         let bullet = Bullet::new(105.0, 205.0);
         assert!(check_collision(&bullet, &enemy));
     }
 
     #[test]
     fn test_bullet_no_collision() {
-        let enemy = Enemy::new(100.0, 200.0);
+        let enemy = Enemy::new(100.0, 200.0, 1.0);
         let bullet = Bullet::new(150.0, 250.0);
         assert!(!check_collision(&bullet, &enemy));
     }
@@ -66,9 +66,9 @@ mod tests {
     #[test]
     fn test_process_collisions() {
         let mut enemies = vec![
-            Enemy::new(100.0, 200.0),
-            Enemy::new(200.0, 200.0),
-            Enemy::new(300.0, 200.0),
+            Enemy::new(100.0, 200.0, 1.0),
+            Enemy::new(200.0, 200.0, 1.0),
+            Enemy::new(300.0, 200.0, 1.0),
         ];
         let bullets = vec![
             Bullet::new(105.0, 205.0), // Should hit first enemy
@@ -81,7 +81,7 @@ mod tests {
 
     #[test]
     fn test_multiple_bullets_one_enemy() {
-        let mut enemies = vec![Enemy::new(100.0, 200.0)];
+        let mut enemies = vec![Enemy::new(100.0, 200.0, 1.0)];
         let bullets = vec![
             Bullet::new(95.0, 195.0),  // Should hit
             Bullet::new(105.0, 205.0), // Should also hit (but enemy already destroyed)
@@ -94,7 +94,7 @@ mod tests {
 
     #[test]
     fn test_no_collisions() {
-        let mut enemies = vec![Enemy::new(100.0, 200.0)];
+        let mut enemies = vec![Enemy::new(100.0, 200.0, 1.0)];
         let bullets = vec![Bullet::new(200.0, 300.0)]; // Far away
 
         let destroyed = process_collisions(&mut enemies, &bullets);
