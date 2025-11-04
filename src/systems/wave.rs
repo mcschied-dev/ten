@@ -53,8 +53,7 @@ pub fn generate_wave(wave: u32) -> Vec<Enemy> {
     let start_y = 50.0; // Position at top of screen
 
     for i in 0..columns {
-        for j in 0..rows {
-            let direction = row_directions[j];
+        for (j, &direction) in row_directions.iter().enumerate().take(rows) {
             enemies.push(Enemy::new(start_x + i as f32 * 60.0, start_y + j as f32 * 50.0, direction));
         }
     }

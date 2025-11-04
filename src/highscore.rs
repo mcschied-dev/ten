@@ -68,16 +68,7 @@ impl HighscoreManager {
         scores
     }
 
-    /// Check if a score qualifies for the top 10
-    pub fn is_highscore(&self, score: u32) -> bool {
-        let top_scores = self.get_top_scores(10);
 
-        if top_scores.len() < 10 {
-            return true;
-        }
-
-        score > top_scores.last().map(|e| e.score).unwrap_or(0)
-    }
 
     // Desktop file I/O implementation
     #[cfg(not(target_arch = "wasm32"))]
@@ -100,12 +91,10 @@ impl HighscoreManager {
         let reader = BufReader::new(file);
         let mut entries = Vec::new();
 
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                if let Some((name, score_str)) = line.split_once(',') {
-                    if let Ok(score) = score_str.trim().parse::<u32>() {
-                        entries.push(HighscoreEntry::new(name.trim().to_string(), score));
-                    }
+        for line in reader.lines().map_while(Result::ok) {
+            if let Some((name, score_str)) = line.split_once(',') {
+                if let Ok(score) = score_str.trim().parse::<u32>() {
+                    entries.push(HighscoreEntry::new(name.trim().to_string(), score));
                 }
             }
         }

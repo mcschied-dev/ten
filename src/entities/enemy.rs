@@ -40,15 +40,7 @@ impl Enemy {
         self.x += self.direction * speed * dt;
     }
 
-    /// Move enemy downward by a specified amount.
-    ///
-    /// # Arguments
-    ///
-    /// * `amount` - Distance to move down in pixels
-    pub fn move_down(&mut self, amount: f32) {
-        self.y += amount;
-        log::debug!("Enemy moved down to y={}", self.y);
-    }
+
 
     /// Check if enemy has reached the screen edge.
     #[must_use]

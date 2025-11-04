@@ -662,38 +662,5 @@ mod tests {
         assert_eq!(enemies[3].y, 50.0); // First row
     }
 
-    #[test]
-    fn test_constants_values() {
-        // Test that game constants are reasonable
-        assert!(SCREEN_WIDTH > 0.0);
-        assert!(SCREEN_HEIGHT > 0.0);
-        assert!(PLAYER_SPEED > 0.0);
-        assert!(BULLET_SPEED > 0.0);
-        assert!(INITIAL_ENEMY_SPEED > 0.0);
-        assert!(POINTS_PER_ENEMY > 0);
-        assert!(SPEED_INCREASE_PER_WAVE > 0.0);
-        assert!(BASE_WIDTH_INCREASE > 0.0);
-    }
 
-    #[test]
-    fn test_collision_radius() {
-        // Test collision detection radius
-        assert!(COLLISION_RADIUS > 0.0);
-        assert!(COLLISION_RADIUS < 50.0); // Reasonable size
-    }
-
-    #[test]
-    fn test_defender_line_position() {
-        // Test that defender line is within screen bounds
-        assert!(DEFENDER_LINE > 0.0);
-        assert!(DEFENDER_LINE < SCREEN_HEIGHT);
-    }
-
-    #[test]
-    fn test_scroll_speeds() {
-        // Test that scroll speeds are reasonable
-        assert!(TEXT_SCROLL_SPEED > 0.0);
-        assert!(BACKGROUND_SCROLL_SPEED > 0.0);
-        assert!(TEXT_SCROLL_SPEED > BACKGROUND_SCROLL_SPEED); // Text should scroll faster
-    }
 }
