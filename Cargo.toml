@@ -3,6 +3,9 @@ name = "ten"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [package.metadata.bundle]
 name = "Hummel"
 identifier = "com.mcschied.hummel"
@@ -10,12 +13,20 @@ icon = ["assets/icon.icns"]
 resources = ["resources"]   
 
 [dependencies]
-ggez = "0.9.3"
+macroquad = { version = "0.4", features = ["audio"] }
 rand = "0.9.0"
-winit = { version = "0.30.9", features = ["serde"] }
 log = "0.4"
-fern = "0.6"
-chrono = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+
+[dev-dependencies]
+tokio = { version = "1.0", features = ["macros", "rt"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-sys = { version = "0.3", features = ["Storage", "Window"] }
 
 
 

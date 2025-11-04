@@ -36,10 +36,10 @@ impl Bullet {
         self.y -= BULLET_SPEED * dt;
     }
 
-    /// Check if bullet has moved off the top of the screen.
+    /// Check if bullet has moved outside the screen boundaries.
     #[must_use]
     pub fn is_out_of_bounds(&self) -> bool {
-        self.y < 0.0
+        self.y < 0.0 || self.x < 0.0 || self.x > crate::constants::SCREEN_WIDTH
     }
 }
 
@@ -56,6 +56,37 @@ mod tests {
     #[test]
     fn test_bullet_in_bounds() {
         let bullet = Bullet::new(100.0, 100.0);
+        assert!(!bullet.is_out_of_bounds());
+    }
+
+    #[test]
+    fn test_bullet_movement() {
+        let mut bullet = Bullet::new(100.0, 200.0);
+        bullet.update(1.0); // 1 second
+
+        // Should have moved up by BULLET_SPEED
+        assert_eq!(bullet.y, 200.0 - crate::constants::BULLET_SPEED);
+        assert_eq!(bullet.x, 100.0); // X should not change
+    }
+
+    #[test]
+    fn test_bullet_out_of_bounds_left() {
+        let bullet = Bullet::new(-10.0, 100.0);
+        assert!(bullet.is_out_of_bounds());
+    }
+
+    #[test]
+    fn test_bullet_out_of_bounds_right() {
+        let bullet = Bullet::new(crate::constants::SCREEN_WIDTH + 10.0, 100.0);
+        assert!(bullet.is_out_of_bounds());
+    }
+
+    #[test]
+    fn test_bullet_within_bounds_center() {
+        let bullet = Bullet::new(
+            crate::constants::SCREEN_WIDTH / 2.0,
+            crate::constants::SCREEN_HEIGHT / 2.0
+        );
         assert!(!bullet.is_out_of_bounds());
     }
 }

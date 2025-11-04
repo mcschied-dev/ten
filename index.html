@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>BumbleBees - Web Version</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            margin: 0 auto;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            text-align: center;
+        }
+        #loading.hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="glcanvas" width="1024" height="768"></canvas>
+    <div id="loading">🐝 Loading BumbleBees...</div>
+    <script type="module">
+        // The WASM module will initialize automatically with #[wasm_bindgen(start)]
+        import('./pkg/ten.js').then(() => {
+            console.log('BumbleBees WASM module loaded');
+            document.getElementById('loading').classList.add('hidden');
+        }).catch(error => {
+            console.error('Failed to load BumbleBees WASM:', error);
+            document.getElementById('loading').innerHTML = '❌ Failed to load game<br><br>' + error.message;
+        });
+    </script>
+</body>
+</html>

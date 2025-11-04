@@ -1,47 +1,623 @@
-//! BumbleBees - Main entry point
-//!
-//! Initializes the game engine, loads resources, and starts the game loop.
+//! BumbleBees - Space Invaders-style arcade shooter
+//! Macroquad edition with WASM support
 
-use ggez::event;
-use ggez::{ContextBuilder, GameResult};
-use std::path::Path;
+use macroquad::prelude::*;
+use macroquad::audio::{load_sound, play_sound_once, play_sound, stop_sound, PlaySoundParams, Sound};
+use std::sync::{Arc, Mutex};
 
-use ten::{init_logger, MainState, SCREEN_HEIGHT, SCREEN_WIDTH};
+mod constants;
+mod entities;
+mod highscore;
+mod systems;
 
-/// Main entry point for the BumbleBees game.
-///
-/// Initializes logging, creates the game context, mounts resources,
-/// and starts the game event loop.
-fn main() -> GameResult {
-    // Initialize logging system
-    if let Err(e) = init_logger() {
-        eprintln!("Failed to initialize logger: {}", e);
+use constants::*;
+use entities::{Bullet, Enemy, Player};
+use highscore::HighscoreManager;
+use systems::{generate_wave, process_collisions};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GameState {
+    Menu,
+    Playing,
+    GameOver,
+}
+
+struct Game {
+    player: Player,
+    bullets: Vec<Bullet>,
+    enemies: Vec<Enemy>,
+    enemy_direction: f32,
+    enemy_speed: f32,
+    wave_number: u32,
+    state: GameState,
+    score: u32,
+    moved_down: bool,
+
+    // Player and highscore
+    player_name: String,
+    highscore_manager: HighscoreManager,
+
+    // UI elements
+    scroll_text_x: Arc<Mutex<f32>>,
+    scroll_direction: Arc<Mutex<f32>>,
+    background_scroll_x: f32,
+
+    // Resources
+    background: Texture2D,
+    enemy_image: Texture2D,
+
+    // Audio
+    shoot_sound: Option<Sound>,
+    hit_sound: Option<Sound>,
+    background_music: Option<Sound>,
+}
+
+impl Game {
+    async fn new() -> Self {
+        log::info!("Loading game resources");
+
+        let background = load_texture("resources/background.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[0, 0, 0, 255]));
+
+        let enemy_image = load_texture("resources/enemy.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[255, 255, 255, 255]));
+
+        let shoot_sound = load_sound("resources/shoot.wav").await.ok();
+
+        let hit_sound = load_sound("resources/hit.wav").await.ok();
+
+        let background_music = load_sound("resources/background_music.wav").await.ok();
+
+        log::info!("Game state created successfully");
+
+        Self {
+            player: Player::new(),
+            bullets: Vec::new(),
+            enemies: generate_wave(1),
+            enemy_direction: 1.0,
+            enemy_speed: INITIAL_ENEMY_SPEED,
+            wave_number: 1,
+            state: GameState::Menu,
+            score: 0,
+            moved_down: false,
+            player_name: String::new(),
+            highscore_manager: HighscoreManager::new("highscores.txt"),
+            scroll_text_x: Arc::new(Mutex::new(SCREEN_WIDTH)),
+            scroll_direction: Arc::new(Mutex::new(-1.0)),
+            background_scroll_x: 0.0,
+            background,
+            enemy_image,
+            shoot_sound,
+            hit_sound,
+            background_music,
+        }
     }
 
-    log::info!("Starting BumbleBees game");
-    log::debug!("Screen dimensions: {}x{}", SCREEN_WIDTH, SCREEN_HEIGHT);
+    fn reset(&mut self) {
+        log::info!("Resetting game to menu");
+        // Stop background music
+        if let Some(ref sound) = self.background_music {
+            stop_sound(sound);
+        }
+        self.player.reset();
+        self.bullets.clear();
+        self.enemies = generate_wave(1);
+        self.enemy_direction = 1.0;
+        self.enemy_speed = INITIAL_ENEMY_SPEED;
+        self.wave_number = 1;
+        self.score = 0;
+        self.moved_down = false;
+        self.state = GameState::Menu;
+        self.background_scroll_x = 0.0;
+        self.player_name.clear();
 
-    // Determine resource path based on project root
-    let resources_dir = format!("{}/resources", env!("CARGO_MANIFEST_DIR"));
-    log::debug!("Resource directory: {}", resources_dir);
+        let mut text_x = self.scroll_text_x.lock().unwrap();
+        *text_x = SCREEN_WIDTH;
+    }
 
-    // Create context
-    let (mut ctx, event_loop) = ContextBuilder::new("bumblebees", "mcschied")
-        .window_setup(ggez::conf::WindowSetup::default().title("BumbleBees"))
-        .window_mode(ggez::conf::WindowMode::default().dimensions(SCREEN_WIDTH, SCREEN_HEIGHT))
-        .build()?;
+    fn start_game(&mut self) {
+        if !self.player_name.is_empty() {
+            log::info!("Starting game for player: {}", self.player_name);
+            self.state = GameState::Playing;
+            self.score = 0;
+            self.wave_number = 1;
+            self.enemies = generate_wave(1);
+            self.bullets.clear();
+            self.player.reset();
+            self.enemy_direction = 1.0;
+            self.enemy_speed = INITIAL_ENEMY_SPEED;
+            self.moved_down = false;
+            // Start background music
+            if let Some(ref sound) = self.background_music {
+                play_sound(sound, PlaySoundParams { looped: true, volume: 0.5 });
+            }
+        } else {
+            log::warn!("Cannot start game without player name");
+        }
+    }
 
-    log::info!("Game context created successfully");
+    fn shoot(&mut self) {
+        if matches!(self.state, GameState::Playing) {
+            let new_bullets = self.player.shoot();
+            if !new_bullets.is_empty() {
+                if let Some(ref sound) = self.shoot_sound {
+                    play_sound_once(sound);
+                }
+            }
+            self.bullets.extend(new_bullets);
+        }
+    }
 
-    // Mount resource directory
-    ctx.fs.mount(Path::new(&resources_dir), true);
-    log::info!("Resources mounted from: {}", resources_dir);
+    fn update_bullets(&mut self, dt: f32) {
+        for bullet in &mut self.bullets {
+            bullet.update(dt);
+        }
+        self.bullets.retain(|bullet| !bullet.is_out_of_bounds());
+    }
 
-    // Create game state
-    log::debug!("Initializing game state");
-    let state = MainState::new(&mut ctx)?;
-    log::info!("Game state initialized, starting event loop");
+    fn update_enemies(&mut self, dt: f32) {
+        let mut reached_edge = false;
 
-    // Run game
-    event::run(ctx, event_loop, state)
+        for enemy in &mut self.enemies {
+            enemy.update(self.enemy_direction, self.enemy_speed, dt);
+            if enemy.has_reached_edge() {
+                reached_edge = true;
+            }
+        }
+
+        if reached_edge && !self.moved_down {
+            self.enemy_direction *= -1.0;
+            self.moved_down = true;
+
+            for enemy in &mut self.enemies {
+                enemy.move_down(40.0);
+
+                if enemy.has_breached_defender_line() {
+                    log::warn!("Enemy breached defender line at y={}, game over!", enemy.y);
+                    self.state = GameState::GameOver;
+                    // Stop background music
+                    if let Some(ref sound) = self.background_music {
+                        stop_sound(sound);
+                    }
+                    // Save highscore immediately when game over
+                    if !self.player_name.is_empty() && self.score > 0 {
+                        log::info!("Game over! Final score: {}", self.score);
+                        self.highscore_manager
+                            .save_highscore(&self.player_name, self.score);
+                    }
+                    return;
+                }
+            }
+        } else if !reached_edge {
+            self.moved_down = false;
+        }
+    }
+
+    fn update_collisions(&mut self) {
+        let enemies_destroyed = process_collisions(&mut self.enemies, &self.bullets);
+
+        if enemies_destroyed > 0 {
+            if let Some(ref sound) = self.hit_sound {
+                play_sound_once(sound);
+            }
+            self.score += enemies_destroyed as u32 * POINTS_PER_ENEMY;
+        }
+    }
+
+    fn check_wave_complete(&mut self) {
+        if self.enemies.is_empty() {
+            self.wave_number += 1;
+            self.enemy_speed += SPEED_INCREASE_PER_WAVE;
+            self.player.upgrade();
+            self.enemies = generate_wave(self.wave_number);
+            log::info!(
+                "Wave {} complete! Starting wave {} with speed {}",
+                self.wave_number - 1,
+                self.wave_number,
+                self.enemy_speed
+            );
+        }
+    }
+
+    fn update_scroll_text(&mut self, dt: f32) {
+        let mut position = self.scroll_text_x.lock().unwrap();
+        let mut direction = self.scroll_direction.lock().unwrap();
+
+        *position += *direction * TEXT_SCROLL_SPEED * dt;
+
+        if *position <= 0.0 && *direction < 0.0 {
+            *direction = 1.0;
+        } else if *position >= SCREEN_WIDTH && *direction > 0.0 {
+            *direction = -1.0;
+        }
+    }
+
+    fn update_background_scroll(&mut self, dt: f32) {
+        self.background_scroll_x -= BACKGROUND_SCROLL_SPEED * dt;
+        let bg_width = self.background.width();
+        if self.background_scroll_x <= -bg_width {
+            self.background_scroll_x += bg_width;
+        }
+    }
+
+    fn update(&mut self, dt: f32) {
+        match self.state {
+            GameState::Menu => {
+                self.update_background_scroll(dt);
+            }
+            GameState::Playing => {
+                // Handle player input
+                if is_key_down(KeyCode::Left) {
+                    self.player.move_left(dt);
+                }
+                if is_key_down(KeyCode::Right) {
+                    self.player.move_right(dt);
+                }
+
+                // Update scrolling background
+                self.update_background_scroll(dt);
+
+                // Update scrolling text
+                self.update_scroll_text(dt);
+
+                // Update bullets
+                self.update_bullets(dt);
+
+                // Update enemies
+                self.update_enemies(dt);
+
+                // Process collisions
+                self.update_collisions();
+
+                // Check if wave is complete
+                self.check_wave_complete();
+            }
+            GameState::GameOver => {
+                self.update_background_scroll(dt);
+            }
+        }
+    }
+
+    fn draw(&self) {
+        clear_background(BLACK);
+
+        match self.state {
+            GameState::Menu => {
+                self.draw_menu();
+            }
+            GameState::Playing => {
+                self.draw_background();
+                self.draw_scroll_text();
+                self.draw_player();
+                self.draw_bullets();
+                self.draw_enemies();
+                self.draw_score();
+            }
+            GameState::GameOver => {
+                self.draw_background();
+                self.draw_game_over();
+            }
+        }
+    }
+
+    fn draw_background(&self) {
+        let bg_width = self.background.width();
+
+        // Draw first instance
+        draw_texture(&self.background, self.background_scroll_x, 0.0, WHITE);
+
+        // Draw second instance for seamless scrolling
+        draw_texture(
+            &self.background,
+            self.background_scroll_x + bg_width,
+            0.0,
+            WHITE,
+        );
+    }
+
+    fn draw_scroll_text(&self) {
+        let text_x = *self.scroll_text_x.lock().unwrap();
+        draw_text("Happy New Year", text_x, 50.0, 50.0, BLACK);
+    }
+
+    fn draw_player(&self) {
+        let player_x = self.player.x - self.player.base_width / 2.0;
+        let player_y = self.player.y();
+        let player_color = Color::from_rgba(0, 128, 0, 255);
+
+        draw_rectangle(
+            player_x,
+            player_y,
+            self.player.base_width,
+            self.player.height(),
+            player_color,
+        );
+    }
+
+    fn draw_bullets(&self) {
+        for bullet in &self.bullets {
+            draw_rectangle(bullet.x - 5.0, bullet.y - 10.0, 10.0, 20.0, WHITE);
+        }
+    }
+
+    fn draw_enemies(&self) {
+        for enemy in &self.enemies {
+            draw_texture(&self.enemy_image, enemy.x - 20.0, enemy.y - 20.0, WHITE);
+        }
+    }
+
+    fn draw_menu(&self) {
+        // Title
+        let title = "BumbleBees";
+        let title_size = 80.0;
+        let title_dims = measure_text(title, None, title_size as u16, 1.0);
+        draw_text(
+            title,
+            SCREEN_WIDTH / 2.0 - title_dims.width / 2.0,
+            100.0,
+            title_size,
+            Color::from_rgba(255, 215, 0, 255),
+        );
+
+        // Highscores section
+        draw_text(
+            "HIGH SCORES",
+            SCREEN_WIDTH / 2.0 - 150.0,
+            180.0,
+            40.0,
+            WHITE,
+        );
+
+        // Display top 10 highscores
+        let top_scores = self.highscore_manager.get_top_scores(10);
+        for (i, entry) in top_scores.iter().enumerate() {
+            let score_text = format!("{}. {} - {}", i + 1, entry.name, entry.score);
+            draw_text(
+                &score_text,
+                SCREEN_WIDTH / 2.0 - 180.0,
+                220.0 + i as f32 * 30.0,
+                24.0,
+                Color::from_rgba(200, 200, 200, 255),
+            );
+        }
+
+        // Name input section
+        draw_text(
+            "Enter Your Name:",
+            SCREEN_WIDTH / 2.0 - 140.0,
+            560.0,
+            30.0,
+            WHITE,
+        );
+
+        // Name input box
+        draw_rectangle_lines(SCREEN_WIDTH / 2.0 - 150.0, 600.0, 300.0, 40.0, 2.0, WHITE);
+
+        // Display current input
+        draw_text(
+            &self.player_name,
+            SCREEN_WIDTH / 2.0 - 140.0,
+            625.0,
+            28.0,
+            WHITE,
+        );
+
+        // Start button
+        let button_color = if self.player_name.is_empty() {
+            Color::from_rgba(100, 100, 100, 255)
+        } else {
+            Color::from_rgba(0, 200, 0, 255)
+        };
+
+        draw_rectangle(SCREEN_WIDTH / 2.0 - 100.0, 660.0, 200.0, 50.0, button_color);
+
+        draw_text("START GAME", SCREEN_WIDTH / 2.0 - 75.0, 690.0, 32.0, WHITE);
+    }
+
+    fn draw_game_over(&self) {
+        draw_text("GAME OVER", SCREEN_WIDTH / 2.0 - 200.0, 280.0, 80.0, RED);
+
+        let score_text = format!("Final Score: {}", self.score);
+        draw_text(&score_text, SCREEN_WIDTH / 2.0 - 150.0, 380.0, 50.0, WHITE);
+
+        draw_text(
+            "Press R to Return to Menu",
+            SCREEN_WIDTH / 2.0 - 180.0,
+            480.0,
+            30.0,
+            Color::from_rgba(200, 200, 200, 255),
+        );
+    }
+
+    fn draw_score(&self) {
+        let score_text = format!("Score: {}", self.score);
+        draw_text(&score_text, SCREEN_WIDTH - 180.0, 40.0, 30.0, WHITE);
+    }
+
+    fn handle_input(&mut self) {
+        match self.state {
+            GameState::Menu => {
+                // Handle text input
+                if let Some(character) = get_last_key_pressed() {
+                    match character {
+                        KeyCode::Backspace => {
+                            self.player_name.pop();
+                        }
+                        KeyCode::Enter => {
+                            self.start_game();
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Handle character input
+                if let Some(ch) = get_char_pressed() {
+                    if ch.is_alphanumeric() && self.player_name.len() < 20 {
+                        self.player_name.push(ch);
+                    }
+                }
+
+                // Handle mouse click on start button
+                if is_mouse_button_pressed(MouseButton::Left) {
+                    let (mouse_x, mouse_y) = mouse_position();
+                    let button_rect = Rect::new(SCREEN_WIDTH / 2.0 - 100.0, 660.0, 200.0, 50.0);
+
+                    if button_rect.contains(Vec2::new(mouse_x, mouse_y)) {
+                        self.start_game();
+                    }
+                }
+            }
+            GameState::Playing => {
+                if is_key_pressed(KeyCode::Space) {
+                    self.shoot();
+                }
+            }
+            GameState::GameOver => {
+                if is_key_pressed(KeyCode::R) {
+                    self.reset();
+                }
+            }
+        }
+    }
+}
+
+fn window_conf() -> Conf {
+    Conf {
+        window_title: "BumbleBees".to_owned(),
+        window_width: SCREEN_WIDTH as i32,
+        window_height: SCREEN_HEIGHT as i32,
+        window_resizable: false,
+        ..Default::default()
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[macroquad::main(window_conf)]
+async fn main() {
+    // Desktop version
+    log::info!("Starting BumbleBees game (Desktop)");
+
+    let mut game = Game::new().await;
+
+    loop {
+        let dt = get_frame_time();
+
+        game.handle_input();
+        game.update(dt);
+        game.draw();
+
+        next_frame().await
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen(start)]
+pub fn main() {
+    // WASM version
+    log::info!("Starting BumbleBees game (WASM)");
+
+    wasm_bindgen_futures::spawn_local(async {
+        let mut game = Game::new().await;
+
+        loop {
+            let dt = get_frame_time();
+
+            game.handle_input();
+            game.update(dt);
+            game.draw();
+
+            next_frame().await
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_window_configuration() {
+        let conf = window_conf();
+
+        assert_eq!(conf.window_width, SCREEN_WIDTH as i32);
+        assert_eq!(conf.window_height, SCREEN_HEIGHT as i32);
+        assert!(!conf.window_resizable);
+    }
+
+    #[test]
+    fn test_game_state_transitions() {
+        // Test game state enum values
+        assert_eq!(GameState::Menu as u8, 0);
+        assert_eq!(GameState::Playing as u8, 1);
+        assert_eq!(GameState::GameOver as u8, 2);
+    }
+
+    #[test]
+    fn test_wave_enemy_counts() {
+        // Test that wave generation produces correct enemy counts
+        let wave1 = generate_wave(1);
+        assert_eq!(wave1.len(), 3 * 10); // 3 rows × 10 columns
+
+        let wave2 = generate_wave(2);
+        assert_eq!(wave2.len(), 4 * 10); // 4 rows × 10 columns
+
+        let wave3 = generate_wave(3);
+        assert_eq!(wave3.len(), 5 * 10); // 5 rows × 10 columns
+    }
+
+    #[test]
+    fn test_enemy_positions_in_wave() {
+        let enemies = generate_wave(1);
+
+        // Check first enemy position
+        assert_eq!(enemies[0].x, 50.0);
+        assert_eq!(enemies[0].y, 100.0);
+
+        // Check enemy spacing
+        assert_eq!(enemies[1].x, 50.0); // Same column
+        assert_eq!(enemies[1].y, 150.0); // Next row
+
+        assert_eq!(enemies[3].x, 110.0); // Next column
+        assert_eq!(enemies[3].y, 100.0); // First row
+    }
+
+    #[test]
+    fn test_constants_values() {
+        // Test that game constants are reasonable
+        assert!(SCREEN_WIDTH > 0.0);
+        assert!(SCREEN_HEIGHT > 0.0);
+        assert!(PLAYER_SPEED > 0.0);
+        assert!(BULLET_SPEED > 0.0);
+        assert!(INITIAL_ENEMY_SPEED > 0.0);
+        assert!(POINTS_PER_ENEMY > 0);
+        assert!(SPEED_INCREASE_PER_WAVE > 0.0);
+        assert!(BASE_WIDTH_INCREASE > 0.0);
+    }
+
+    #[test]
+    fn test_collision_radius() {
+        // Test collision detection radius
+        assert!(COLLISION_RADIUS > 0.0);
+        assert!(COLLISION_RADIUS < 50.0); // Reasonable size
+    }
+
+    #[test]
+    fn test_defender_line_position() {
+        // Test that defender line is within screen bounds
+        assert!(DEFENDER_LINE > 0.0);
+        assert!(DEFENDER_LINE < SCREEN_HEIGHT);
+    }
+
+    #[test]
+    fn test_scroll_speeds() {
+        // Test that scroll speeds are reasonable
+        assert!(TEXT_SCROLL_SPEED > 0.0);
+        assert!(BACKGROUND_SCROLL_SPEED > 0.0);
+        assert!(TEXT_SCROLL_SPEED > BACKGROUND_SCROLL_SPEED); // Text should scroll faster
+    }
 }

@@ -1,8 +1,10 @@
-use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
+//! Highscore management with cross-platform storage.
+//!
+//! Uses file I/O on desktop and LocalStorage on WASM.
 
-#[derive(Debug, Clone)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HighscoreEntry {
     pub name: String,
     pub score: u32,
@@ -15,19 +17,76 @@ impl HighscoreEntry {
 }
 
 pub struct HighscoreManager {
-    file_path: String,
+    storage_key: String,
 }
 
 impl HighscoreManager {
-    pub fn new(file_path: &str) -> Self {
+    pub fn new(key: &str) -> Self {
         Self {
-            file_path: file_path.to_string(),
+            storage_key: key.to_string(),
         }
     }
 
-    /// Load highscores from file, sorted by score (highest first)
+    /// Load highscores from storage, sorted by score (highest first)
     pub fn load_highscores(&self) -> Vec<HighscoreEntry> {
-        let path = Path::new(&self.file_path);
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.load_from_localstorage()
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.load_from_file()
+        }
+    }
+
+    /// Save a new highscore
+    pub fn save_highscore(&self, name: &str, score: u32) {
+        let mut entries = self.load_highscores();
+
+        // Add new entry
+        entries.push(HighscoreEntry::new(name.to_string(), score));
+
+        // Sort by score, highest first
+        entries.sort_by(|a, b| b.score.cmp(&a.score));
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.save_to_localstorage(&entries);
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.save_to_file(&entries);
+        }
+    }
+
+    /// Get top N highscores
+    pub fn get_top_scores(&self, n: usize) -> Vec<HighscoreEntry> {
+        let mut scores = self.load_highscores();
+        scores.truncate(n);
+        scores
+    }
+
+    /// Check if a score qualifies for the top 10
+    pub fn is_highscore(&self, score: u32) -> bool {
+        let top_scores = self.get_top_scores(10);
+
+        if top_scores.len() < 10 {
+            return true;
+        }
+
+        score > top_scores.last().map(|e| e.score).unwrap_or(0)
+    }
+
+    // Desktop file I/O implementation
+    #[cfg(not(target_arch = "wasm32"))]
+    fn load_from_file(&self) -> Vec<HighscoreEntry> {
+        use std::fs::File;
+        use std::io::{BufRead, BufReader};
+        use std::path::Path;
+
+        let path = Path::new(&self.storage_key);
 
         if !path.exists() {
             return Vec::new();
@@ -51,34 +110,20 @@ impl HighscoreManager {
             }
         }
 
-        // Sort by score, highest first
         entries.sort_by(|a, b| b.score.cmp(&a.score));
         entries
     }
 
-    /// Get top N highscores
-    pub fn get_top_scores(&self, n: usize) -> Vec<HighscoreEntry> {
-        let mut scores = self.load_highscores();
-        scores.truncate(n);
-        scores
-    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn save_to_file(&self, entries: &[HighscoreEntry]) {
+        use std::fs::OpenOptions;
+        use std::io::Write;
 
-    /// Save a new highscore
-    pub fn save_highscore(&self, name: &str, score: u32) {
-        let mut entries = self.load_highscores();
-
-        // Add new entry
-        entries.push(HighscoreEntry::new(name.to_string(), score));
-
-        // Sort by score, highest first
-        entries.sort_by(|a, b| b.score.cmp(&a.score));
-
-        // Write all entries back to file
         if let Ok(mut file) = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(&self.file_path)
+            .open(&self.storage_key)
         {
             for entry in entries {
                 let _ = writeln!(file, "{}, {}", entry.name, entry.score);
@@ -86,19 +131,40 @@ impl HighscoreManager {
         }
     }
 
-    /// Check if a score qualifies for the top 10
-    pub fn is_highscore(&self, score: u32) -> bool {
-        let top_scores = self.get_top_scores(10);
+    // WASM LocalStorage implementation
+    #[cfg(target_arch = "wasm32")]
+    fn load_from_localstorage(&self) -> Vec<HighscoreEntry> {
+        use web_sys::window;
 
-        if top_scores.len() < 10 {
-            return true;
+        if let Some(window) = window() {
+            if let Ok(Some(storage)) = window.local_storage() {
+                if let Ok(Some(data)) = storage.get_item(&self.storage_key) {
+                    if let Ok(entries) = serde_json::from_str::<Vec<HighscoreEntry>>(&data) {
+                        return entries;
+                    }
+                }
+            }
         }
 
-        score > top_scores.last().map(|e| e.score).unwrap_or(0)
+        Vec::new()
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn save_to_localstorage(&self, entries: &[HighscoreEntry]) {
+        use web_sys::window;
+
+        if let Ok(json) = serde_json::to_string(entries) {
+            if let Some(window) = window() {
+                if let Ok(Some(storage)) = window.local_storage() {
+                    let _ = storage.set_item(&self.storage_key, &json);
+                }
+            }
+        }
     }
 }
 
 #[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use super::*;
     use std::fs;
@@ -153,6 +219,51 @@ mod tests {
         assert_eq!(top_10.len(), 10);
         assert_eq!(top_10[0].score, 1500);
         assert_eq!(top_10[9].score, 600);
+
+        // Clean up after test
+        let _ = fs::remove_file(test_file);
+    }
+
+    #[test]
+    fn test_get_top_scores_fewer_than_requested() {
+        let test_file = "test_few_scores.txt";
+        let manager = HighscoreManager::new(test_file);
+
+        // Clean up before test
+        let _ = fs::remove_file(test_file);
+
+        // Save only 3 scores
+        manager.save_highscore("Alice", 100);
+        manager.save_highscore("Bob", 200);
+        manager.save_highscore("Charlie", 150);
+
+        // Request top 10, should get only 3
+        let top_scores = manager.get_top_scores(10);
+        assert_eq!(top_scores.len(), 3);
+        assert_eq!(top_scores[0].score, 200); // Bob
+        assert_eq!(top_scores[1].score, 150); // Charlie
+        assert_eq!(top_scores[2].score, 100); // Alice
+
+        // Clean up after test
+        let _ = fs::remove_file(test_file);
+    }
+
+    #[test]
+    fn test_duplicate_names_highscore() {
+        let test_file = "test_duplicates.txt";
+        let manager = HighscoreManager::new(test_file);
+
+        // Clean up before test
+        let _ = fs::remove_file(test_file);
+
+        // Save multiple scores for same player
+        manager.save_highscore("Alice", 100);
+        manager.save_highscore("Alice", 200);
+        manager.save_highscore("Alice", 150);
+
+        // Should keep all scores
+        let scores = manager.load_highscores();
+        assert_eq!(scores.len(), 3);
 
         // Clean up after test
         let _ = fs::remove_file(test_file);

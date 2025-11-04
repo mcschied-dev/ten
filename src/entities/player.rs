@@ -155,6 +155,53 @@ mod tests {
         let mut player = Player::new();
         let initial_width = player.base_width;
         player.upgrade();
-        assert_eq!(player.base_width, initial_width + crate::constants::BASE_WIDTH_INCREASE);
+        assert_eq!(
+            player.base_width,
+            initial_width + crate::constants::BASE_WIDTH_INCREASE
+        );
+    }
+
+    #[test]
+    fn test_player_reset() {
+        let mut player = Player::new();
+        player.x = 200.0;
+        player.base_width = 100.0;
+        player.available_shots = 5;
+
+        player.reset();
+
+        assert_eq!(player.x, crate::constants::SCREEN_WIDTH / 2.0);
+        assert_eq!(player.base_width, 50.0);
+        assert_eq!(player.available_shots, 1);
+    }
+
+    #[test]
+    fn test_player_shoot_multiple_shots() {
+        let mut player = Player::new();
+        player.upgrade(); // Now has 2 shots
+        player.upgrade(); // Now has 3 shots
+
+        let bullets = player.shoot();
+        assert_eq!(bullets.len(), 3);
+
+        // Check bullet positions are spread across player width
+        assert_eq!(bullets[0].x, player.x - player.base_width / 2.0 + player.base_width / 4.0);
+        assert_eq!(bullets[1].x, player.x);
+        assert_eq!(bullets[2].x, player.x + player.base_width / 2.0 - player.base_width / 4.0);
+    }
+
+    #[test]
+    fn test_player_position_clamping_extremes() {
+        let mut player = Player::new();
+
+        // Test extreme left
+        player.x = -1000.0;
+        player.clamp_position();
+        assert_eq!(player.x, player.base_width / 2.0);
+
+        // Test extreme right
+        player.x = 2000.0;
+        player.clamp_position();
+        assert_eq!(player.x, crate::constants::SCREEN_WIDTH - player.base_width / 2.0);
     }
 }

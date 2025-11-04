@@ -1,6 +1,6 @@
 # 🐝 BumbleBees
 
-A classic Space Invaders-style arcade shooter built in Rust with the ggez game engine. Battle against increasingly difficult waves of enemies with a dynamic parallax scrolling background and comprehensive highscore tracking.
+A classic Space Invaders-style arcade shooter built in Rust with the macroquad game engine. Battle against increasingly difficult waves of enemies with a dynamic parallax scrolling background and comprehensive highscore tracking. Supports both desktop and web (WASM) platforms.
 
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
 ![Rust](https://img.shields.io/badge/rust-1.70%2B-orange)
@@ -244,7 +244,7 @@ pub const POINTS_PER_ENEMY: u32 = 10;
 Place your own assets in the `resources/` directory:
 - **background.png**: 1024x768 PNG
 - **enemy.png**: 40x40 PNG with transparency
-- **Audio files**: WAV format (other formats not supported by ggez)
+- **Audio files**: WAV format (supported by macroquad)
 
 ## 🐛 Troubleshooting
 
@@ -271,8 +271,8 @@ Place your own assets in the `resources/` directory:
 ## 📝 Technical Details
 
 - **Language**: Rust (Edition 2021)
-- **Game Engine**: ggez 0.9.3
-- **Audio**: rodio (via ggez)
+- **Game Engine**: macroquad 0.4
+- **Audio**: macroquad audio system
 - **Logging**: log + fern + chrono
 - **Graphics**: OpenGL/Metal via wgpu
 - **Supported Platforms**: macOS, Linux, Windows
@@ -310,7 +310,7 @@ This project is available under the MIT License.
 
 ## 🙏 Acknowledgments
 
-- Built with [ggez](https://ggez.rs/) - A Rust library for making 2D games
+- Built with [macroquad](https://macroquad.rs/) - A Rust library for making 2D games with WASM support
 - Inspired by the classic Space Invaders arcade game
 - Audio and graphics assets created for this project
 
