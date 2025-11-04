@@ -444,14 +444,14 @@ impl Game {
         // Draw background layer (slower, more transparent, horizontally mirrored)
         for i in -1..instances_needed {
             let x_pos = self.background_scroll_x2 + (i as f32 * bg_width);
-            // Use draw_texture_ex for vertical mirroring
+            // Use draw_texture_ex for horizontal mirroring
             draw_texture_ex(
                 &self.background2,
                 x_pos,
                 0.0,
                 Color::from_rgba(255, 255, 255, 180), // 70% opacity
                 DrawTextureParams {
-                    flip_y: true, // Mirror vertically
+                    flip_x: true, // Mirror horizontally
                     ..Default::default()
                 },
             );
