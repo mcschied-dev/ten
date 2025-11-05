@@ -193,12 +193,33 @@ python3 -m http.server 8000
 - **ten.wasm**: Compiled WebAssembly binary (~850KB optimized)
 - **resources/**: All game assets (textures, sounds, fonts)
 
+#### Deploying to a Web Server
+To deploy the game to your web server, copy these files:
+
+```
+your-webserver/
+├── game.html              # Main game page
+├── ten.wasm              # Build this locally (see above)
+└── resources/            # Copy entire directory
+    ├── 1.png - 10.png        (background layers)
+    ├── background.png        (main background)
+    ├── custom_font.png       (pixel font)
+    ├── enemy.png            (enemy sprite)
+    ├── explosion1-3.png     (explosion frames)
+    ├── hummel_icns_temp.png (game icon)
+    ├── shoot.wav, hit.wav   (sound effects)
+    └── background_music.wav (optional - 32MB)
+```
+
+**Note:** The WASM file and security reports are not in the repo. Build them locally with the commands above.
+
 #### Technical Notes
 - Uses **macroquad 0.4** with built-in WASM support (no wasm-bindgen needed)
 - **miniquad** provides the underlying WebGL rendering
-- Canvas size: 1024x768 (matches desktop resolution)
+- Canvas size: 1024x575 (optimized for web)
 - **getrandom** with "js" feature for WASM-compatible random numbers
 - Fallback textures for missing resources
+- No passwords or API keys in codebase
 
 ## 📁 Project Structure
 
@@ -409,7 +430,6 @@ This project is available under the MIT License.
 ## 📚 Additional Resources
 
 - [CLAUDE.md](CLAUDE.md) - Comprehensive developer documentation
-- [AGENTS.md](AGENTS.md) - Build/lint/test commands reference
 - [Cargo.toml](Cargo.toml) - Rust dependencies and project metadata
 - `debug.log` - Detailed runtime logs for debugging
 - `index.html` - Web deployment entry point
