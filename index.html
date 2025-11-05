@@ -27,19 +27,44 @@
         #loading.hidden {
             display: none;
         }
+        #error {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 0, 0, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 1001;
+        }
+        #error.visible {
+            display: block;
+        }
     </style>
 </head>
 <body>
-    <canvas id="glcanvas" width="1024" height="768"></canvas>
+    <canvas id="glcanvas" width="1024" height="768" tabindex="0"></canvas>
     <div id="loading">🐝 Loading BumbleBees...</div>
+    <div id="error">
+        <h3>Failed to load game</h3>
+        <p id="error-message"></p>
+    </div>
     <script type="module">
-        // The WASM module will initialize automatically with #[wasm_bindgen(start)]
+        console.log('Starting to load WASM...');
         import('./pkg/ten.js').then(() => {
-            console.log('BumbleBees WASM module loaded');
+            console.log('BumbleBees WASM loaded and initialized successfully!');
             document.getElementById('loading').classList.add('hidden');
         }).catch(error => {
             console.error('Failed to load BumbleBees WASM:', error);
-            document.getElementById('loading').innerHTML = '❌ Failed to load game<br><br>' + error.message;
+            console.error('Error details:', error.stack || error);
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').classList.add('visible');
+            document.getElementById('error-message').textContent =
+                'Error: ' + (error.message || 'Unknown error') +
+                '\n\nCheck browser console for details.';
         });
     </script>
 </body>

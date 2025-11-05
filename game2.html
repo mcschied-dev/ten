@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>BumbleBees - Space Invaders Clone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        #title {
+            color: white;
+            font-size: 3em;
+            font-weight: 700;
+            text-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            margin: 0;
+        }
+
+        canvas {
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+        }
+
+        #loading {
+            color: white;
+            text-align: center;
+            margin-top: 20px;
+            font-size: 1.2em;
+        }
+
+        .info {
+            color: white;
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+            max-width: 600px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1 id="title">🐝 BumbleBees</h1>
+        <canvas id="glcanvas" tabindex='1'></canvas>
+        <div id="loading">Loading...</div>
+        <div class="info">
+            Use Arrow Keys to move | Space to shoot
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("glcanvas");
+        const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+
+        if (!gl) {
+            document.getElementById('loading').innerHTML = '<div class="error">WebGL not supported in your browser</div>';
+        }
+
+        // Simple WASM loader
+        async function loadWasm() {
+            try {
+                document.getElementById('loading').textContent = 'Fetching WASM...';
+                const response = await fetch('ten.wasm');
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch WASM: ${response.statusText}`);
+                }
+
+                document.getElementById('loading').textContent = 'Compiling WASM...';
+                const bytes = await response.arrayBuffer();
+
+                document.getElementById('loading').textContent = 'Instantiating WASM...';
+
+                // Create imports object
+                const imports = {
+                    env: {
+                        // Add any required imports here
+                    }
+                };
+
+                const result = await WebAssembly.instantiate(bytes, imports);
+
+                document.getElementById('loading').textContent = 'Starting game...';
+
+                // Try to call the exported start function
+                if (result.instance.exports._start) {
+                    result.instance.exports._start();
+                } else if (result.instance.exports.main) {
+                    result.instance.exports.main();
+                } else {
+                    console.log('Available exports:', Object.keys(result.instance.exports));
+                    document.getElementById('loading').innerHTML =
+                        '<div class="error">No start function found in WASM module<br>Available exports: ' +
+                        Object.keys(result.instance.exports).join(', ') + '</div>';
+                    return;
+                }
+
+                document.getElementById('loading').style.display = 'none';
+                console.log('Game started successfully');
+
+            } catch (error) {
+                console.error('Failed to load WASM:', error);
+                document.getElementById('loading').innerHTML =
+                    '<div class="error">Failed to load game:<br>' + error.message + '</div>';
+            }
+        }
+
+        window.addEventListener('load', loadWasm);
+    </script>
+</body>
+</html>
