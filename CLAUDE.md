@@ -352,3 +352,34 @@ The `Cargo.toml` includes bundle metadata:
 - Bundle identifier: `com.mcschied.hummel`
 - Icon: `assets/icon.icns`
 - Resources directory bundled automatically
+
+## GitHub Repository Management
+
+### Branch Protection
+
+The master branch should be protected to prevent accidental force pushes or deletion:
+
+1. Go to repository **Settings** → **Branches**
+2. Click **Add rule** under "Branch protection rules"
+3. Set "Branch name pattern" to: `master`
+4. Recommended settings for solo development:
+   - ☑️ **Lock branch** - Prevents force pushes and deletion
+   - ☑️ **Do not allow bypassing the above settings**
+5. Optional settings for collaborative development:
+   - ☑️ **Require a pull request before merging**
+   - ☑️ **Require status checks to pass before merging** (if CI/CD is configured)
+   - ☑️ **Require conversation resolution before merging**
+   - ☑️ **Include administrators**
+
+**Note**: Branch protection rules must be configured through GitHub's web interface, not via git commands.
+
+### Repository Best Practices
+
+The repository follows these best practices:
+- **No binary files**: Users build WASM locally (ten.wasm in .gitignore)
+- **No user data**: highscores.txt excluded from version control
+- **No security reports**: sbom.json and related files generated locally
+- **No IDE files**: .vscode, .idea, .claude excluded
+- **No system files**: .DS_Store excluded
+- **Comprehensive .gitignore**: Organized by category (build artifacts, IDE files, runtime files, etc.)
+- **Clean commit history**: Descriptive commit messages with co-author attribution
