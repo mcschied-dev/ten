@@ -132,14 +132,14 @@ struct BackgroundLayer {
 #[derive(Debug, Clone, Copy)]
 enum BackgroundLayerType {
     Sky,
-    Layer10,
-    Clouds,
+    Layer4,
     Layer5,
-    FarField,
     Layer6,
-    NearField,
     Layer7,
     Layer8,
+    Clouds,
+    FarField,
+    NearField,
 }
 
 impl BackgroundLayer {
@@ -197,11 +197,11 @@ struct Game {
     clouds: Texture2D,
     far_field: Texture2D,
     near_field: Texture2D,
+    layer_4: Texture2D,
     layer_5: Texture2D,
     layer_6: Texture2D,
     layer_7: Texture2D,
     layer_8: Texture2D,
-    layer_10: Texture2D,
     intro_icon: Texture2D,
     custom_font: Texture2D,
     enemy_image: Texture2D,
@@ -235,6 +235,10 @@ impl Game {
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[0, 100, 0, 255])); // Dark green fallback
 
+        let layer_4 = load_texture_fallback("resources/bg_layer_04.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
+
         let layer_5 = load_texture_fallback("resources/bg_layer_05.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
@@ -248,10 +252,6 @@ impl Game {
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
 
         let layer_8 = load_texture_fallback("resources/bg_layer_08.png")
-            .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
-
-        let layer_10 = load_texture_fallback("resources/bg_layer_10.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
 
@@ -288,17 +288,17 @@ impl Game {
             .await
             .ok();
 
-        // Initialize background layers for parallax scrolling
+        // Initialize background layers for parallax scrolling (8 layers total)
         let background_layers = vec![
-            BackgroundLayer::new(0.0, sky.width(), BackgroundLayerType::Sky), // Static sky
-            BackgroundLayer::new(-10.0, layer_10.width(), BackgroundLayerType::Layer10), // Very slow layer 10
-            BackgroundLayer::new(-20.0, clouds.width(), BackgroundLayerType::Clouds), // Slow clouds
-            BackgroundLayer::new(-50.0, layer_5.width(), BackgroundLayerType::Layer5), // Medium-slow layer 5
-            BackgroundLayer::new(-100.0, far_field.width(), BackgroundLayerType::FarField), // Medium far-field
-            BackgroundLayer::new(-200.0, layer_6.width(), BackgroundLayerType::Layer6), // Medium-fast layer 6
-            BackgroundLayer::new(-300.0, near_field.width(), BackgroundLayerType::NearField), // Fast near-field
-            BackgroundLayer::new(-400.0, layer_7.width(), BackgroundLayerType::Layer7), // Very fast layer 7
-            BackgroundLayer::new(-500.0, layer_8.width(), BackgroundLayerType::Layer8), // Fastest layer 8
+            BackgroundLayer::new(0.0, sky.width(), BackgroundLayerType::Sky), // Static sky (layer 1)
+            BackgroundLayer::new(-10.0, layer_8.width(), BackgroundLayerType::Layer8), // Very slow layer 8
+            BackgroundLayer::new(-20.0, clouds.width(), BackgroundLayerType::Clouds), // Slow clouds (layer 2)
+            BackgroundLayer::new(-50.0, layer_4.width(), BackgroundLayerType::Layer4), // Medium-slow layer 4
+            BackgroundLayer::new(-100.0, far_field.width(), BackgroundLayerType::FarField), // Medium far-field (layer 3)
+            BackgroundLayer::new(-200.0, layer_5.width(), BackgroundLayerType::Layer5), // Medium-fast layer 5
+            BackgroundLayer::new(-300.0, near_field.width(), BackgroundLayerType::NearField), // Fast near-field (main bg)
+            BackgroundLayer::new(-400.0, layer_6.width(), BackgroundLayerType::Layer6), // Very fast layer 6
+            BackgroundLayer::new(-500.0, layer_7.width(), BackgroundLayerType::Layer7), // Fastest layer 7
         ];
 
         log::info!("Game state created successfully");
@@ -325,11 +325,11 @@ impl Game {
             clouds,
             far_field,
             near_field,
+            layer_4,
             layer_5,
             layer_6,
             layer_7,
             layer_8,
-            layer_10,
             intro_icon,
             custom_font,
             enemy_image,
@@ -360,14 +360,14 @@ impl Game {
         for layer in &mut self.background_layers {
             let texture_width = match layer.layer_type {
                 BackgroundLayerType::Sky => self.sky.width(),
-                BackgroundLayerType::Layer10 => self.layer_10.width(),
-                BackgroundLayerType::Clouds => self.clouds.width(),
+                BackgroundLayerType::Layer4 => self.layer_4.width(),
                 BackgroundLayerType::Layer5 => self.layer_5.width(),
-                BackgroundLayerType::FarField => self.far_field.width(),
                 BackgroundLayerType::Layer6 => self.layer_6.width(),
-                BackgroundLayerType::NearField => self.near_field.width(),
                 BackgroundLayerType::Layer7 => self.layer_7.width(),
                 BackgroundLayerType::Layer8 => self.layer_8.width(),
+                BackgroundLayerType::Clouds => self.clouds.width(),
+                BackgroundLayerType::FarField => self.far_field.width(),
+                BackgroundLayerType::NearField => self.near_field.width(),
             };
             layer.reset(texture_width);
         }
@@ -575,14 +575,14 @@ impl Game {
         for layer in &mut self.background_layers {
             let texture_width = match layer.layer_type {
                 BackgroundLayerType::Sky => self.sky.width(),
-                BackgroundLayerType::Layer10 => self.layer_10.width(),
-                BackgroundLayerType::Clouds => self.clouds.width(),
+                BackgroundLayerType::Layer4 => self.layer_4.width(),
                 BackgroundLayerType::Layer5 => self.layer_5.width(),
-                BackgroundLayerType::FarField => self.far_field.width(),
                 BackgroundLayerType::Layer6 => self.layer_6.width(),
-                BackgroundLayerType::NearField => self.near_field.width(),
                 BackgroundLayerType::Layer7 => self.layer_7.width(),
                 BackgroundLayerType::Layer8 => self.layer_8.width(),
+                BackgroundLayerType::Clouds => self.clouds.width(),
+                BackgroundLayerType::FarField => self.far_field.width(),
+                BackgroundLayerType::NearField => self.near_field.width(),
             };
             layer.update(dt, texture_width);
         }
@@ -658,14 +658,14 @@ impl Game {
         for layer in &self.background_layers {
             let texture = match layer.layer_type {
                 BackgroundLayerType::Sky => &self.sky,
-                BackgroundLayerType::Layer10 => &self.layer_10,
-                BackgroundLayerType::Clouds => &self.clouds,
+                BackgroundLayerType::Layer4 => &self.layer_4,
                 BackgroundLayerType::Layer5 => &self.layer_5,
-                BackgroundLayerType::FarField => &self.far_field,
                 BackgroundLayerType::Layer6 => &self.layer_6,
-                BackgroundLayerType::NearField => &self.near_field,
                 BackgroundLayerType::Layer7 => &self.layer_7,
                 BackgroundLayerType::Layer8 => &self.layer_8,
+                BackgroundLayerType::Clouds => &self.clouds,
+                BackgroundLayerType::FarField => &self.far_field,
+                BackgroundLayerType::NearField => &self.near_field,
             };
 
             // Only scroll layers that have speed > 0 (non-static layers)

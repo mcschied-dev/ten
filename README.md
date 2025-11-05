@@ -208,8 +208,7 @@ your-webserver/
     ├── bg_layer_05.png       (parallax layer 5)
     ├── bg_layer_06.png       (parallax layer 6)
     ├── bg_layer_07.png       (parallax layer 7)
-    ├── bg_layer_08.png       (parallax layer 8)
-    ├── bg_layer_10.png       (parallax layer 10 - foreground)
+    ├── bg_layer_08.png       (parallax layer 8 - foreground)
     ├── bg_main.png           (main background)
     ├── ui_font.png           (custom pixel font)
     ├── ui_logo.png           (game icon)
@@ -252,7 +251,7 @@ ten/
 │   ├── highscore.rs     # Highscore persistence system
 │   └── entities.rs      # Entity re-exports (legacy)
 ├── resources/           # Game assets (follows game dev naming conventions)
-│   ├── bg_layer_01.png - bg_layer_10.png  # Parallax background layers
+│   ├── bg_layer_01-08.png     # 8 parallax background layers (sequential)
 │   ├── bg_main.png            # Main background
 │   ├── ui_font.png            # Custom pixel font texture
 │   ├── ui_logo.png            # Game icon
@@ -365,7 +364,7 @@ pub const POINTS_PER_ENEMY: u32 = 10;
 All assets follow game development naming conventions (category_description_variant.ext).
 
 Place your own assets in the `resources/` directory:
-- **Background layers**: `bg_layer_01.png` through `bg_layer_10.png` (parallax layers)
+- **Background layers**: `bg_layer_01.png` through `bg_layer_08.png` (8 sequential parallax layers)
 - **Main background**: `bg_main.png` (1024x575 PNG)
 - **Sprites**: `sprite_enemy.png` (40x40 PNG with transparency)
 - **VFX**: `vfx_explosion_01.png` through `vfx_explosion_03.png` (animation frames)
