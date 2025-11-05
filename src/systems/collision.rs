@@ -22,7 +22,7 @@ pub fn check_collision(bullet: &Bullet, enemy: &Enemy) -> bool {
 
 /// Process collisions between bullets and enemies.
 ///
-/// Removes all enemies hit by bullets and returns the count of destroyed enemies.
+/// Removes all enemies hit by bullets and returns their positions for explosion effects.
 ///
 /// # Arguments
 ///
@@ -31,18 +31,33 @@ pub fn check_collision(bullet: &Bullet, enemy: &Enemy) -> bool {
 ///
 /// # Returns
 ///
-/// The number of enemies destroyed
-pub fn process_collisions(enemies: &mut Vec<Enemy>, bullets: &[Bullet]) -> usize {
-    let initial_count = enemies.len();
+/// A vector of (x, y) positions where enemies were destroyed
+pub fn process_collisions(enemies: &mut Vec<Enemy>, bullets: &[Bullet]) -> Vec<(f32, f32)> {
+    let mut destroyed_positions = Vec::new();
 
-    enemies.retain(|enemy| !bullets.iter().any(|bullet| check_collision(bullet, enemy)));
-
-    let destroyed = initial_count - enemies.len();
-    if destroyed > 0 {
-        log::debug!("Destroyed {} enemies in collision check", destroyed);
+    // Find all enemies that were hit and collect their positions
+    let mut i = 0;
+    while i < enemies.len() {
+        if bullets
+            .iter()
+            .any(|bullet| check_collision(bullet, &enemies[i]))
+        {
+            // Store the position before removing
+            destroyed_positions.push((enemies[i].x, enemies[i].y));
+            enemies.remove(i);
+        } else {
+            i += 1;
+        }
     }
 
-    destroyed
+    if !destroyed_positions.is_empty() {
+        log::debug!(
+            "Destroyed {} enemies in collision check",
+            destroyed_positions.len()
+        );
+    }
+
+    destroyed_positions
 }
 
 #[cfg(test)]
@@ -74,9 +89,10 @@ mod tests {
             Bullet::new(105.0, 205.0), // Should hit first enemy
         ];
 
-        let destroyed = process_collisions(&mut enemies, &bullets);
-        assert_eq!(destroyed, 1);
+        let destroyed_positions = process_collisions(&mut enemies, &bullets);
+        assert_eq!(destroyed_positions.len(), 1);
         assert_eq!(enemies.len(), 2);
+        assert_eq!(destroyed_positions[0], (100.0, 200.0));
     }
 
     #[test]
@@ -87,8 +103,8 @@ mod tests {
             Bullet::new(105.0, 205.0), // Should also hit (but enemy already destroyed)
         ];
 
-        let destroyed = process_collisions(&mut enemies, &bullets);
-        assert_eq!(destroyed, 1); // Only one enemy destroyed
+        let destroyed_positions = process_collisions(&mut enemies, &bullets);
+        assert_eq!(destroyed_positions.len(), 1); // Only one enemy destroyed
         assert_eq!(enemies.len(), 0);
     }
 
@@ -97,8 +113,8 @@ mod tests {
         let mut enemies = vec![Enemy::new(100.0, 200.0, 1.0)];
         let bullets = vec![Bullet::new(200.0, 300.0)]; // Far away
 
-        let destroyed = process_collisions(&mut enemies, &bullets);
-        assert_eq!(destroyed, 0);
+        let destroyed_positions = process_collisions(&mut enemies, &bullets);
+        assert_eq!(destroyed_positions.len(), 0);
         assert_eq!(enemies.len(), 1);
     }
 
@@ -107,8 +123,8 @@ mod tests {
         let mut enemies: Vec<Enemy> = vec![];
         let bullets: Vec<Bullet> = vec![];
 
-        let destroyed = process_collisions(&mut enemies, &bullets);
-        assert_eq!(destroyed, 0);
+        let destroyed_positions = process_collisions(&mut enemies, &bullets);
+        assert_eq!(destroyed_positions.len(), 0);
         assert_eq!(enemies.len(), 0);
     }
 }

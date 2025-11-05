@@ -19,6 +19,7 @@ A retro-styled Space Invaders arcade shooter built in Rust with macroquad. Featu
 - **Custom Pixel Font**: Authentic 8x8 pixel font for highscore display (A-Z, 0-9, symbols)
 - **C64-Style Scrolling Highscores**: Top highscores scroll upward like classic Commodore 64 games
 - **9-Layer Parallax Background**: Multi-depth scrolling background with sky, clouds, and terrain layers
+- **Explosion Animations**: 3-frame stop-motion explosion effects when enemies are destroyed
 - **Red Bold Score Display**: Prominent red score text with shadow effect during gameplay
 - **Enhanced Intro Screen**: Game icon, repositioned highscore display, and improved layout
 - **Classic Arcade Aesthetics**: Retro-styled graphics and animations

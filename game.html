@@ -36,6 +36,8 @@
             border-radius: 12px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.4);
             display: block;
+            width: 1024px;
+            height: 575px;
         }
 
         #loading {
@@ -114,7 +116,7 @@
 
     <div id="game-container">
         <h1 id="title">🐝 BumbleBees</h1>
-        <canvas id="glcanvas" width="1024" height="768" tabindex="0"></canvas>
+        <canvas id="glcanvas" width="1024" height="575" tabindex="0" style="image-rendering: pixelated;"></canvas>
         <div class="info">
             Use Arrow Keys to move | Space to shoot | Press Space to start
         </div>
@@ -149,7 +151,7 @@
             // Call load function from mq_js_bundle
             if (typeof load === 'function') {
                 console.log('Loading WASM with miniquad...');
-                load("ten.wasm");
+                load("ten.wasm?v=" + Date.now());
 
                 // Hide loading screen after a short delay (game will start automatically)
                 setTimeout(function() {

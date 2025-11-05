@@ -13,7 +13,7 @@ mod highscore;
 mod systems;
 
 use constants::*;
-use entities::{Bullet, Enemy, Player};
+use entities::{Bullet, Enemy, Explosion, Player};
 use highscore::HighscoreManager;
 use systems::{generate_wave, process_collisions};
 
@@ -173,6 +173,7 @@ struct Game {
     player: Player,
     bullets: Vec<Bullet>,
     enemies: Vec<Enemy>,
+    explosions: Vec<Explosion>,
     enemy_speed: f32,
     descent_speed: f32,
     descent_distance: f32, // how much enemies need to descend
@@ -204,6 +205,9 @@ struct Game {
     intro_icon: Texture2D,
     custom_font: Texture2D,
     enemy_image: Texture2D,
+    explosion_frame1: Texture2D,
+    explosion_frame2: Texture2D,
+    explosion_frame3: Texture2D,
 
     // Audio
     shoot_sound: Option<Sound>,
@@ -263,6 +267,19 @@ impl Game {
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[255, 255, 255, 255]));
 
+        // Load explosion animation frames (3 frames for stop-motion effect)
+        let explosion_frame1 = load_texture_fallback("resources/explosion1.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(20, 20, &[255, 100, 0, 255])); // Orange fallback
+
+        let explosion_frame2 = load_texture_fallback("resources/explosion2.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(24, 24, &[255, 150, 0, 255])); // Brighter orange fallback
+
+        let explosion_frame3 = load_texture_fallback("resources/explosion3.png")
+            .await
+            .unwrap_or_else(|_| Texture2D::from_rgba8(28, 28, &[255, 200, 100, 255])); // Yellow fallback
+
         let shoot_sound = load_sound_fallback("resources/shoot.wav").await.ok();
 
         let hit_sound = load_sound_fallback("resources/hit.wav").await.ok();
@@ -290,6 +307,7 @@ impl Game {
             player: Player::new(),
             bullets: Vec::new(),
             enemies: generate_wave(1),
+            explosions: Vec::new(),
             enemy_speed: INITIAL_ENEMY_SPEED,
             descent_speed: 100.0,  // pixels per second for controlled descent
             descent_distance: 0.0, // current descent progress
@@ -315,6 +333,9 @@ impl Game {
             intro_icon,
             custom_font,
             enemy_image,
+            explosion_frame1,
+            explosion_frame2,
+            explosion_frame3,
             shoot_sound,
             hit_sound,
             background_music,
@@ -475,14 +496,33 @@ impl Game {
         }
     }
 
-    fn update_collisions(&mut self) {
-        let enemies_destroyed = process_collisions(&mut self.enemies, &self.bullets);
+    fn update_explosions(&mut self, dt: f32) {
+        // Update all explosions
+        for explosion in &mut self.explosions {
+            explosion.update(dt);
+        }
 
-        if enemies_destroyed > 0 {
+        // Remove finished explosions
+        self.explosions.retain(|explosion| !explosion.is_finished());
+    }
+
+    fn update_collisions(&mut self) {
+        let destroyed_positions = process_collisions(&mut self.enemies, &self.bullets);
+
+        if !destroyed_positions.is_empty() {
+            // Play hit sound
             if let Some(ref sound) = self.hit_sound {
                 play_sound_once(sound);
             }
-            self.score += enemies_destroyed as u32 * POINTS_PER_ENEMY;
+
+            // Update score
+            self.score += destroyed_positions.len() as u32 * POINTS_PER_ENEMY;
+
+            // Create explosion at each destroyed enemy position
+            for (x, y) in destroyed_positions {
+                self.explosions.push(Explosion::new(x, y));
+                log::debug!("Created explosion at ({}, {})", x, y);
+            }
         }
     }
 
@@ -575,6 +615,9 @@ impl Game {
                 // Update enemies
                 self.update_enemies(dt);
 
+                // Update explosions
+                self.update_explosions(dt);
+
                 // Process collisions
                 self.update_collisions();
 
@@ -600,6 +643,7 @@ impl Game {
                 self.draw_player();
                 self.draw_bullets();
                 self.draw_enemies();
+                self.draw_explosions();
                 self.draw_score();
             }
             GameState::GameOver => {
@@ -701,6 +745,28 @@ impl Game {
         }
     }
 
+    fn draw_explosions(&self) {
+        for explosion in &self.explosions {
+            // Select the appropriate frame texture based on current frame
+            let texture = match explosion.current_frame {
+                0 => &self.explosion_frame1,
+                1 => &self.explosion_frame2,
+                2 => &self.explosion_frame3,
+                _ => continue, // Skip if beyond frames (shouldn't happen)
+            };
+
+            // Draw explosion centered at the position
+            let half_width = texture.width() / 2.0;
+            let half_height = texture.height() / 2.0;
+            draw_texture(
+                texture,
+                explosion.x - half_width,
+                explosion.y - half_height,
+                WHITE,
+            );
+        }
+    }
+
     /// Draw text using the custom pixel font texture
     ///
     /// This function renders text using a custom 8x8 pixel font stored in a texture atlas.
@@ -764,120 +830,209 @@ impl Game {
         // Draw parallax backgrounds
         self.draw_background();
 
-        // Draw intro icon as extra layer (only visible in menu)
-        let icon_x = 30.0; // 30px from left edge
-        let icon_y = 30.0; // 30px from top edge
-        draw_texture(&self.intro_icon, icon_x, icon_y, WHITE);
+        // Center the main menu content vertically and horizontally
+        let center_x = SCREEN_WIDTH / 2.0;
+        let center_y = SCREEN_HEIGHT / 2.0;
 
-        // Title - commented out
-        /*
-        let title = "BumbleBees";
-        let title_size = 80.0;
-        let title_dims = measure_text(title, None, title_size as u16, 1.0);
-        draw_text(
-            title,
-            SCREEN_WIDTH / 2.0 - title_dims.width / 2.0,
-            100.0,
-            title_size,
-            Color::from_rgba(255, 215, 0, 255),
-        );
-        */
-
-        // Highscores section - using custom font (moved to top)
-        self.draw_custom_text(
-            "HIGH SCORES",
-            SCREEN_WIDTH / 2.0 - 148.0, // Back to original positioning
-            52.0,                       // Moved to top
-            2.0,                        // Back to normal size
-            Color::from_rgba(0, 0, 0, 128),
-        );
-        self.draw_custom_text(
-            "HIGH SCORES",
-            SCREEN_WIDTH / 2.0 - 150.0, // Back to original positioning
-            50.0,                       // Moved to top
-            2.0,                        // Back to normal size
-            BLACK,
-        );
-
-        // Display all highscores with scrolling animation (C64 style)
-        let top_scores = self.highscore_manager.get_top_scores(usize::MAX);
-        for (i, entry) in top_scores.iter().enumerate() {
-            let score_text = format!("{}. {} - {}", i + 1, entry.name, entry.score);
-            let y_pos = 90.0 + i as f32 * 30.0 + self.highscore_scroll_offset; // Back to original spacing
-
-            // Only draw if visible on screen (adjusted for top position)
-            if y_pos > 40.0 && y_pos < 500.0 {
-                // Draw shadow for bold effect
-                self.draw_custom_text(
-                    &score_text,
-                    SCREEN_WIDTH / 2.0 - 178.0, // Back to original positioning
-                    y_pos + 2.0,                // Back to original shadow offset
-                    1.5,                        // Back to normal size
-                    Color::from_rgba(0, 0, 0, 128),
-                );
-                self.draw_custom_text(
-                    &score_text,
-                    SCREEN_WIDTH / 2.0 - 180.0, // Back to original positioning
-                    y_pos,
-                    1.5,   // Back to normal size
-                    BLACK, // Changed to black
-                );
-            }
+        // Debug: print screen dimensions
+        #[cfg(target_arch = "wasm32")]
+        {
+            println!(
+                "WASM Screen dimensions: {}x{} (expected: {}x{})",
+                screen_width(),
+                screen_height(),
+                SCREEN_WIDTH,
+                SCREEN_HEIGHT
+            );
+            println!("WASM Center coordinates: {}x{}", center_x, center_y);
         }
 
-        // Name input section
-        // Draw shadow for bold effect
+        // Draw hummel icon on the left side, centered vertically
+        let icon_x = 50.0; // Left margin
+        let icon_y = center_y - self.intro_icon.height() / 2.0; // Center vertically
+        draw_texture(&self.intro_icon, icon_x, icon_y, WHITE);
+
+        // Title at the top
+        let title_text = "BUMBLEBEES";
+        let title_dims = measure_text(title_text, None, 60, 1.0);
         draw_text(
-            "Enter Your Name:",
-            SCREEN_WIDTH / 2.0 - 138.0,
-            562.0,
-            30.0,
-            Color::from_rgba(0, 0, 0, 128),
-        );
-        draw_text(
-            "Enter Your Name:",
-            SCREEN_WIDTH / 2.0 - 140.0,
-            560.0,
-            30.0,
+            title_text,
+            center_x - title_dims.width / 2.0,
+            100.0,
+            60.0,
             BLACK,
         );
+
+        // Subtitle
+        let subtitle_text = "Space Invaders Remake";
+        let subtitle_dims = measure_text(subtitle_text, None, 24, 1.0);
+        draw_text(
+            subtitle_text,
+            center_x - subtitle_dims.width / 2.0,
+            170.0,
+            24.0,
+            Color::from_rgba(100, 100, 100, 255),
+        );
+
+        // Main menu panel - centered horizontally on screen
+        let panel_width = 320.0;
+        let panel_height = 200.0;
+        let panel_x = center_x - panel_width / 2.0;
+        let panel_y = center_y - panel_height / 2.0;
+
+        // Debug: print panel position
+        #[cfg(target_arch = "wasm32")]
+        {
+            println!(
+                "WASM Panel position: x={}, y={}, w={}, h={}",
+                panel_x, panel_y, panel_width, panel_height
+            );
+        }
+
+        // Draw semi-transparent panel background
+        draw_rectangle(
+            panel_x,
+            panel_y,
+            panel_width,
+            panel_height,
+            Color::from_rgba(255, 255, 255, 200),
+        );
+        draw_rectangle_lines(panel_x, panel_y, panel_width, panel_height, 2.0, BLACK);
+
+        // Name input section inside panel
+        let label_text = "Enter Your Name:";
+        let label_dims = measure_text(label_text, None, 20, 1.0);
+        let label_x = panel_x + (panel_width - label_dims.width) / 2.0; // Center within panel
+        draw_text(label_text, label_x, panel_y + 25.0, 20.0, BLACK);
 
         // Name input box
-        draw_rectangle_lines(SCREEN_WIDTH / 2.0 - 150.0, 600.0, 300.0, 40.0, 2.0, WHITE);
+        let box_width = 280.0;
+        let box_height = 40.0;
+        let box_x = panel_x + (panel_width - box_width) / 2.0; // Center within panel
+        let box_y = panel_y + 55.0;
 
-        // Display current input
-        draw_text(
-            &self.player_name,
-            SCREEN_WIDTH / 2.0 - 140.0,
-            625.0,
-            28.0,
-            BLACK,
+        // Draw input box background (light gray)
+        draw_rectangle(
+            box_x,
+            box_y,
+            box_width,
+            box_height,
+            Color::from_rgba(240, 240, 240, 255),
         );
+        // Draw border
+        draw_rectangle_lines(box_x, box_y, box_width, box_height, 2.0, BLACK);
 
-        // Start button
-        let button_color = if self.player_name.is_empty() {
-            Color::from_rgba(100, 100, 100, 255)
+        // Display text inside the box - properly centered
+        if !self.player_name.is_empty() {
+            // Center the entered name both horizontally and vertically in the box
+            let font_size = 24.0;
+            let name_dims = measure_text(&self.player_name, None, font_size as u16, 1.0);
+            let name_x = box_x + (box_width - name_dims.width) / 2.0;
+            let name_y = box_y + (box_height + font_size) / 2.0 - font_size * 0.25; // Better vertical centering
+            draw_text(&self.player_name, name_x, name_y, font_size, BLACK);
         } else {
-            Color::from_rgba(0, 200, 0, 255)
+            // Center placeholder text both horizontally and vertically in the box
+            let placeholder = "Type your name...";
+            let placeholder_font_size = 22.0;
+            let placeholder_dims =
+                measure_text(placeholder, None, placeholder_font_size as u16, 1.0);
+            let placeholder_x = box_x + (box_width - placeholder_dims.width) / 2.0;
+            let placeholder_y =
+                box_y + (box_height + placeholder_font_size) / 2.0 - placeholder_font_size * 0.25; // Better vertical centering
+            draw_text(
+                placeholder,
+                placeholder_x,
+                placeholder_y,
+                placeholder_font_size,
+                Color::from_rgba(150, 150, 150, 255),
+            );
+        }
+
+        // Start button - centered below input box
+        let button_width = 280.0;
+        let button_height = 45.0;
+        let button_x = panel_x + (panel_width - button_width) / 2.0; // Center within panel
+        let button_y = panel_y + 120.0;
+
+        let button_color = if self.player_name.is_empty() {
+            Color::from_rgba(180, 180, 180, 255)
+        } else {
+            Color::from_rgba(0, 150, 0, 255)
         };
 
-        draw_rectangle(SCREEN_WIDTH / 2.0 - 100.0, 660.0, 200.0, 50.0, button_color);
+        draw_rectangle(
+            button_x,
+            button_y,
+            button_width,
+            button_height,
+            button_color,
+        );
+        draw_rectangle_lines(button_x, button_y, button_width, button_height, 2.0, BLACK);
 
-        draw_text("START GAME", SCREEN_WIDTH / 2.0 - 75.0, 690.0, 32.0, WHITE);
+        // Button text - properly centered
+        let button_text = "START GAME";
+        let button_font_size = 24.0;
+        let button_text_dims = measure_text(button_text, None, button_font_size as u16, 1.0);
+        let button_text_x = button_x + (button_width - button_text_dims.width) / 2.0;
+        let button_text_y =
+            button_y + (button_height + button_font_size) / 2.0 - button_font_size * 0.25; // Better vertical centering
+        draw_text(
+            button_text,
+            button_text_x,
+            button_text_y,
+            button_font_size,
+            WHITE,
+        );
+
+        // Highscores section - bottom right
+        let highscore_x = SCREEN_WIDTH - 300.0;
+        let highscore_y = SCREEN_HEIGHT - 250.0;
+
+        // Highscores header
+        self.draw_custom_text("HIGH SCORES", highscore_x + 10.0, highscore_y, 1.8, BLACK);
+
+        // Display highscores
+        let top_scores = self.highscore_manager.get_top_scores(5); // Show only top 5
+        for (i, entry) in top_scores.iter().enumerate() {
+            let score_text = format!("{}. {} - {}", i + 1, entry.name, entry.score);
+            let y_pos = highscore_y + 35.0 + i as f32 * 25.0;
+
+            self.draw_custom_text(&score_text, highscore_x + 10.0, y_pos, 1.2, BLACK);
+        }
     }
 
     fn draw_game_over(&self) {
-        draw_text("GAME OVER", SCREEN_WIDTH / 2.0 - 200.0, 280.0, 80.0, RED);
-
-        let score_text = format!("Final Score: {}", self.score);
-        draw_text(&score_text, SCREEN_WIDTH / 2.0 - 150.0, 380.0, 50.0, WHITE);
-
+        // Center "GAME OVER" text
+        let game_over_text = "GAME OVER";
+        let game_over_dims = measure_text(game_over_text, None, 80, 1.0);
         draw_text(
-            "Press R to Return to Menu",
-            SCREEN_WIDTH / 2.0 - 180.0,
-            480.0,
+            game_over_text,
+            SCREEN_WIDTH / 2.0 - game_over_dims.width / 2.0,
+            200.0,
+            80.0,
+            RED,
+        );
+
+        // Center score text
+        let score_text = format!("Final Score: {}", self.score);
+        let score_dims = measure_text(&score_text, None, 50, 1.0);
+        draw_text(
+            &score_text,
+            SCREEN_WIDTH / 2.0 - score_dims.width / 2.0,
+            300.0,
+            50.0,
+            BLACK,
+        );
+
+        // Center "Press R" text
+        let press_r_text = "Press R to Return to Menu";
+        let press_r_dims = measure_text(press_r_text, None, 30, 1.0);
+        draw_text(
+            press_r_text,
+            SCREEN_WIDTH / 2.0 - press_r_dims.width / 2.0,
+            400.0,
             30.0,
-            Color::from_rgba(200, 200, 200, 255),
+            Color::from_rgba(0, 0, 0, 255),
         );
     }
 
@@ -929,8 +1084,18 @@ impl Game {
                 if is_mouse_button_pressed(MouseButton::Left) {
                     let (mouse_x, mouse_y) = mouse_position();
                     println!("Mouse clicked at: ({}, {})", mouse_x, mouse_y);
-                    let button_rect = Rect::new(SCREEN_WIDTH / 2.0 - 100.0, 660.0, 200.0, 50.0);
-                    println!("Button rect: x={}, y={}, w={}, h={}", button_rect.x, button_rect.y, button_rect.w, button_rect.h);
+                    // Button position matches the centered panel layout
+                    let center_x = SCREEN_WIDTH / 2.0;
+                    let center_y = SCREEN_HEIGHT / 2.0;
+                    let panel_x = center_x - 160.0; // panel_width / 2 = 320 / 2 = 160
+                    let panel_y = center_y - 100.0; // panel_height / 2 = 200 / 2 = 100
+                    let button_x = panel_x + (320.0 - 280.0) / 2.0; // Center within panel
+                    let button_y = panel_y + 120.0;
+                    let button_rect = Rect::new(button_x, button_y, 280.0, 45.0);
+                    println!(
+                        "Button rect: x={}, y={}, w={}, h={}",
+                        button_rect.x, button_rect.y, button_rect.w, button_rect.h
+                    );
 
                     if button_rect.contains(Vec2::new(mouse_x, mouse_y)) {
                         println!("Button clicked!");

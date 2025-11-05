@@ -7,7 +7,7 @@
 pub const SCREEN_WIDTH: f32 = 1024.0;
 
 /// Screen height in pixels
-pub const SCREEN_HEIGHT: f32 = 768.0;
+pub const SCREEN_HEIGHT: f32 = 575.0;
 
 /// Player movement speed in pixels per second
 pub const PLAYER_SPEED: f32 = 300.0;
@@ -20,12 +20,6 @@ pub const INITIAL_ENEMY_SPEED: f32 = 150.0;
 
 /// Distance from bottom of screen where enemies trigger game over
 pub const DEFENDER_LINE: f32 = 100.0;
-
-/// Speed of the scrolling text in pixels per second
-pub const TEXT_SCROLL_SPEED: f32 = 100.0;
-
-/// Speed of the parallax background scrolling in pixels per second
-pub const BACKGROUND_SCROLL_SPEED: f32 = 50.0;
 
 /// Collision detection radius in pixels
 pub const COLLISION_RADIUS: f32 = 20.0;
