@@ -1,6 +1,33 @@
+# Build artifacts
 /target
 pkg/
+
+# macOS system files
 .DS_Store
+**/.DS_Store
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.claude/
+
+# Game runtime files
 debug.log
 highscores.txt
 test_*.txt
+
+# Security reports (should be generated locally, not committed)
+sbom.json
+sbom-viewer.html
+security-report.html
+
+# Large binary files (rebuild locally)
+ten.wasm
+*.wasm
+
+# Temporary files
+custom_font.png
+game2.html
