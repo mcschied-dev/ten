@@ -219,72 +219,72 @@ impl Game {
     async fn new() -> Self {
         log::info!("Loading game resources");
 
-        let sky = load_texture_fallback("resources/1.png")
+        let sky = load_texture_fallback("resources/bg_layer_01.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[135, 206, 235, 255])); // Sky blue fallback
 
-        let clouds = load_texture_fallback("resources/2.png")
+        let clouds = load_texture_fallback("resources/bg_layer_02.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[255, 255, 255, 255]));
 
-        let far_field = load_texture_fallback("resources/3.png")
+        let far_field = load_texture_fallback("resources/bg_layer_03.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[34, 139, 34, 255])); // Forest green fallback
 
-        let near_field = load_texture_fallback("resources/background.png")
+        let near_field = load_texture_fallback("resources/bg_main.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[0, 100, 0, 255])); // Dark green fallback
 
-        let layer_5 = load_texture_fallback("resources/5.png")
+        let layer_5 = load_texture_fallback("resources/bg_layer_05.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
 
-        let layer_6 = load_texture_fallback("resources/6.png")
+        let layer_6 = load_texture_fallback("resources/bg_layer_06.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
 
-        let layer_7 = load_texture_fallback("resources/7.png")
+        let layer_7 = load_texture_fallback("resources/bg_layer_07.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
 
-        let layer_8 = load_texture_fallback("resources/8.png")
+        let layer_8 = load_texture_fallback("resources/bg_layer_08.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
 
-        let layer_10 = load_texture_fallback("resources/10.png")
+        let layer_10 = load_texture_fallback("resources/bg_layer_10.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
 
-        let intro_icon = load_texture_fallback("resources/hummel_icns_temp.png")
+        let intro_icon = load_texture_fallback("resources/ui_logo.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[200, 200, 200, 255])); // Light gray fallback
 
-        let custom_font = load_texture_fallback("resources/custom_font.png")
+        let custom_font = load_texture_fallback("resources/ui_font.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[255, 255, 255, 255])); // White fallback
 
-        let enemy_image = load_texture_fallback("resources/enemy.png")
+        let enemy_image = load_texture_fallback("resources/sprite_enemy.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[255, 255, 255, 255]));
 
         // Load explosion animation frames (3 frames for stop-motion effect)
-        let explosion_frame1 = load_texture_fallback("resources/explosion1.png")
+        let explosion_frame1 = load_texture_fallback("resources/vfx_explosion_01.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(20, 20, &[255, 100, 0, 255])); // Orange fallback
 
-        let explosion_frame2 = load_texture_fallback("resources/explosion2.png")
+        let explosion_frame2 = load_texture_fallback("resources/vfx_explosion_02.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(24, 24, &[255, 150, 0, 255])); // Brighter orange fallback
 
-        let explosion_frame3 = load_texture_fallback("resources/explosion3.png")
+        let explosion_frame3 = load_texture_fallback("resources/vfx_explosion_03.png")
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(28, 28, &[255, 200, 100, 255])); // Yellow fallback
 
-        let shoot_sound = load_sound_fallback("resources/shoot.wav").await.ok();
+        let shoot_sound = load_sound_fallback("resources/sfx_shoot.wav").await.ok();
 
-        let hit_sound = load_sound_fallback("resources/hit.wav").await.ok();
+        let hit_sound = load_sound_fallback("resources/sfx_hit.wav").await.ok();
 
-        let background_music = load_sound_fallback("resources/background_music.wav")
+        let background_music = load_sound_fallback("resources/music_background.wav")
             .await
             .ok();
 

@@ -198,17 +198,28 @@ To deploy the game to your web server, copy these files:
 
 ```
 your-webserver/
-├── game.html              # Main game page
-├── ten.wasm              # Build this locally (see above)
-└── resources/            # Copy entire directory
-    ├── 1.png - 10.png        (background layers)
-    ├── background.png        (main background)
-    ├── custom_font.png       (pixel font)
-    ├── enemy.png            (enemy sprite)
-    ├── explosion1-3.png     (explosion frames)
-    ├── hummel_icns_temp.png (game icon)
-    ├── shoot.wav, hit.wav   (sound effects)
-    └── background_music.wav (optional - 32MB)
+├── game.html                 # Main game page
+├── ten.wasm                  # Build this locally (see above)
+└── resources/                # Copy entire directory
+    ├── bg_layer_01.png       (parallax layer 1 - sky)
+    ├── bg_layer_02.png       (parallax layer 2 - clouds)
+    ├── bg_layer_03.png       (parallax layer 3 - far field)
+    ├── bg_layer_04.png       (parallax layer 4)
+    ├── bg_layer_05.png       (parallax layer 5)
+    ├── bg_layer_06.png       (parallax layer 6)
+    ├── bg_layer_07.png       (parallax layer 7)
+    ├── bg_layer_08.png       (parallax layer 8)
+    ├── bg_layer_10.png       (parallax layer 10 - foreground)
+    ├── bg_main.png           (main background)
+    ├── ui_font.png           (custom pixel font)
+    ├── ui_logo.png           (game icon)
+    ├── sprite_enemy.png      (enemy sprite)
+    ├── vfx_explosion_01.png  (explosion frame 1)
+    ├── vfx_explosion_02.png  (explosion frame 2)
+    ├── vfx_explosion_03.png  (explosion frame 3)
+    ├── sfx_shoot.wav         (shooting sound effect)
+    ├── sfx_hit.wav           (hit sound effect)
+    └── music_background.wav  (background music - 32MB)
 ```
 
 **Note:** The WASM file and security reports are not in the repo. Build them locally with the commands above.
@@ -240,15 +251,16 @@ ten/
 │   │   └── wave.rs      # Enemy wave generation
 │   ├── highscore.rs     # Highscore persistence system
 │   └── entities.rs      # Entity re-exports (legacy)
-├── resources/           # Game assets
-│   ├── 1.png through 10.png  # Parallax background layers
-│   ├── custom_font.png       # Custom pixel font texture
-│   ├── enemy.png              # Enemy sprite
-│   ├── hummel_icns_temp.png   # Game icon
-│   ├── shoot.wav              # Shooting sound effect
-│   ├── hit.wav                # Hit sound effect
-│   ├── background_music.wav
-│   └── bg.png                 # Additional background assets
+├── resources/           # Game assets (follows game dev naming conventions)
+│   ├── bg_layer_01.png - bg_layer_10.png  # Parallax background layers
+│   ├── bg_main.png            # Main background
+│   ├── ui_font.png            # Custom pixel font texture
+│   ├── ui_logo.png            # Game icon
+│   ├── sprite_enemy.png       # Enemy sprite
+│   ├── vfx_explosion_01-03.png # Explosion animation frames
+│   ├── sfx_shoot.wav          # Shooting sound effect
+│   ├── sfx_hit.wav            # Hit sound effect
+│   └── music_background.wav   # Background music
 ├── assets/              # Additional assets
 │   └── icon.icns        # macOS application icon
 ├── Cargo.toml           # Rust dependencies and metadata
@@ -350,10 +362,15 @@ pub const POINTS_PER_ENEMY: u32 = 10;
 
 ### Replacing Assets
 
+All assets follow game development naming conventions (category_description_variant.ext).
+
 Place your own assets in the `resources/` directory:
-- **background.png**: 1024x768 PNG
-- **enemy.png**: 40x40 PNG with transparency
-- **Audio files**: WAV format (supported by macroquad)
+- **Background layers**: `bg_layer_01.png` through `bg_layer_10.png` (parallax layers)
+- **Main background**: `bg_main.png` (1024x575 PNG)
+- **Sprites**: `sprite_enemy.png` (40x40 PNG with transparency)
+- **VFX**: `vfx_explosion_01.png` through `vfx_explosion_03.png` (animation frames)
+- **UI**: `ui_font.png` (pixel font), `ui_logo.png` (game icon)
+- **Audio**: `sfx_*.wav` (sound effects), `music_*.wav` (background music) - WAV format only
 
 ## 🐛 Troubleshooting
 
