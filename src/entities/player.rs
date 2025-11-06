@@ -1,6 +1,6 @@
 //! Player entity implementation.
 
-use crate::constants::{BASE_WIDTH_INCREASE, PLAYER_SPEED, SCREEN_HEIGHT, SCREEN_WIDTH};
+use crate::constants::{BASE_WIDTH_INCREASE, SCREEN_HEIGHT, SCREEN_WIDTH};
 use crate::entities::Bullet;
 
 /// Represents the player character.
@@ -33,8 +33,9 @@ impl Player {
     /// # Arguments
     ///
     /// * `dt` - Delta time in seconds
-    pub fn move_left(&mut self, dt: f32) {
-        self.x -= PLAYER_SPEED * dt;
+    /// * `speed` - Player movement speed in pixels per second
+    pub fn move_left(&mut self, dt: f32, speed: f32) {
+        self.x -= speed * dt;
         self.clamp_position();
     }
 
@@ -43,8 +44,9 @@ impl Player {
     /// # Arguments
     ///
     /// * `dt` - Delta time in seconds
-    pub fn move_right(&mut self, dt: f32) {
-        self.x += PLAYER_SPEED * dt;
+    /// * `speed` - Player movement speed in pixels per second
+    pub fn move_right(&mut self, dt: f32, speed: f32) {
+        self.x += speed * dt;
         self.clamp_position();
     }
 
@@ -75,14 +77,23 @@ impl Player {
     }
 
     /// Upgrade player with more shots and wider base.
+    /// Caps at maximum of 3 shots to prevent excessive growth.
     pub fn upgrade(&mut self) {
-        self.available_shots += 1;
-        self.base_width += BASE_WIDTH_INCREASE;
-        log::info!(
-            "Player upgraded: {} shots, width {}",
-            self.available_shots,
-            self.base_width
-        );
+        if self.available_shots < 3 {
+            self.available_shots += 1;
+            self.base_width += BASE_WIDTH_INCREASE;
+            log::info!(
+                "Player upgraded: {} shots, width {}",
+                self.available_shots,
+                self.base_width
+            );
+        } else {
+            log::info!(
+                "Player already at maximum: {} shots, width {}",
+                self.available_shots,
+                self.base_width
+            );
+        }
     }
 
     /// Reset player to initial state.
@@ -144,9 +155,17 @@ mod tests {
     fn test_available_shots_increase() {
         let mut player = Player::new();
         assert_eq!(player.available_shots, 1);
-        player.upgrade();
-        assert_eq!(player.available_shots, 2);
-        player.upgrade();
+
+        // Test upgrades up to the limit of 3 shots
+        for i in 2..=3 {
+            player.upgrade();
+            assert_eq!(player.available_shots, i);
+        }
+
+        // Test that further upgrades don't increase beyond 3
+        player.upgrade(); // 4th upgrade - should not increase
+        assert_eq!(player.available_shots, 3);
+        player.upgrade(); // 5th upgrade - should not increase
         assert_eq!(player.available_shots, 3);
     }
 
@@ -154,11 +173,22 @@ mod tests {
     fn test_base_width_increase() {
         let mut player = Player::new();
         let initial_width = player.base_width;
-        player.upgrade();
-        assert_eq!(
-            player.base_width,
-            initial_width + crate::constants::BASE_WIDTH_INCREASE
-        );
+
+        // Test width increases up to 3 upgrades (2 increases from initial)
+        for i in 1..=2 {
+            player.upgrade();
+            assert_eq!(
+                player.base_width,
+                initial_width + (i as f32 * crate::constants::BASE_WIDTH_INCREASE)
+            );
+        }
+
+        // Test that further upgrades don't increase width beyond the maximum
+        let max_width = player.base_width;
+        player.upgrade(); // 3rd upgrade - should not increase
+        assert_eq!(player.base_width, max_width);
+        player.upgrade(); // 4th upgrade - should not increase
+        assert_eq!(player.base_width, max_width);
     }
 
     #[test]

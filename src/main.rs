@@ -296,6 +296,8 @@ struct Game {
     enemies: Vec<Enemy>,
     explosions: Vec<Explosion>,
     enemy_speed: f32,
+    bullet_speed: f32,
+    player_speed: f32,
     descent_speed: f32,
     descent_distance: f32, // how much enemies need to descend
     wave_number: u32,
@@ -506,6 +508,8 @@ impl Game {
             enemies: generate_wave(1),
             explosions: Vec::new(),
             enemy_speed: INITIAL_ENEMY_SPEED,
+            bullet_speed: crate::constants::BULLET_SPEED,
+            player_speed: crate::constants::PLAYER_SPEED,
             descent_speed: 100.0,  // pixels per second for controlled descent
             descent_distance: 0.0, // current descent progress
             wave_number: 1,
@@ -557,6 +561,8 @@ impl Game {
         self.bullets.clear();
         self.enemies = generate_wave(1);
         self.enemy_speed = INITIAL_ENEMY_SPEED;
+        self.bullet_speed = crate::constants::BULLET_SPEED;
+        self.player_speed = crate::constants::PLAYER_SPEED;
         self.descent_speed = 100.0;
         self.descent_distance = 0.0;
         self.wave_number = 1;
@@ -659,7 +665,7 @@ impl Game {
 
     fn update_bullets(&mut self, dt: f32) {
         for bullet in &mut self.bullets {
-            bullet.update(dt);
+            bullet.update(dt, self.bullet_speed);
         }
         self.bullets.retain(|bullet| !bullet.is_out_of_bounds());
     }
@@ -770,13 +776,17 @@ impl Game {
         if self.enemies.is_empty() {
             self.wave_number += 1;
             self.enemy_speed += SPEED_INCREASE_PER_WAVE;
+            self.bullet_speed += BULLET_SPEED_INCREASE_PER_WAVE;
+            self.player_speed += PLAYER_SPEED_INCREASE_PER_WAVE;
             self.player.upgrade();
             self.enemies = generate_wave(self.wave_number);
             log::info!(
-                "Wave {} complete! Starting wave {} with speed {}",
+                "Wave {} complete! Starting wave {} with enemy speed {}, bullet speed {}, and player speed {}",
                 self.wave_number - 1,
                 self.wave_number,
-                self.enemy_speed
+                self.enemy_speed,
+                self.bullet_speed,
+                self.player_speed
             );
         }
     }
@@ -850,10 +860,10 @@ impl Game {
             GameState::Playing => {
                 // Handle player input
                 if is_key_down(KeyCode::Left) {
-                    self.player.move_left(dt);
+                    self.player.move_left(dt, self.player_speed);
                 }
                 if is_key_down(KeyCode::Right) {
-                    self.player.move_right(dt);
+                    self.player.move_right(dt, self.player_speed);
                 }
 
                 // Update scrolling background
@@ -1397,14 +1407,15 @@ mod tests {
     #[test]
     fn test_wave_enemy_counts() {
         // Test that wave generation produces correct enemy counts
+        // All waves now use Space Invaders-style fixed formation: 5 rows × 10 columns = 50 enemies
         let wave1 = generate_wave(1);
-        assert_eq!(wave1.len(), 3 * 10); // 3 rows × 10 columns
+        assert_eq!(wave1.len(), 50);
 
         let wave2 = generate_wave(2);
-        assert_eq!(wave2.len(), 4 * 10); // 4 rows × 10 columns
+        assert_eq!(wave2.len(), 50);
 
         let wave3 = generate_wave(3);
-        assert_eq!(wave3.len(), 5 * 10); // 5 rows × 10 columns
+        assert_eq!(wave3.len(), 50);
     }
 
     #[test]
@@ -1419,8 +1430,9 @@ mod tests {
         assert_eq!(enemies[1].x, 242.0); // Same column
         assert_eq!(enemies[1].y, 100.0); // Next row
 
-        assert_eq!(enemies[3].x, 302.0); // Next column
-        assert_eq!(enemies[3].y, 50.0); // First row
+        // With 5 rows, enemies[5] is the first enemy of the second column
+        assert_eq!(enemies[5].x, 302.0); // Next column
+        assert_eq!(enemies[5].y, 50.0); // First row
     }
 
     // =======================================================================
