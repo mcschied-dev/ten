@@ -317,6 +317,12 @@ struct Game {
     highscore_scroll_offset: f32, // For scrolling highscore list animation
     background_layers: Vec<BackgroundLayer>,
 
+    // Flying bee animation
+    bee_x: f32,                    // Current X position of flying bee
+    bee_y: f32,                    // Y position of flying bee
+    bee_active: bool,              // Whether bee is currently flying
+    bee_next_spawn_timer: f32,     // Time until next bee spawn
+
     // Resources
     sky: Texture2D,
     clouds: Texture2D,
@@ -341,6 +347,7 @@ struct Game {
     shoot_sound: Option<Sound>,
     hit_sound: Option<Sound>,
     background_music: Option<Sound>,
+    bee_sound: Option<Sound>,
 }
 
 impl Game {
@@ -486,6 +493,8 @@ impl Game {
             .await
             .ok();
 
+        let bee_sound = load_sound_fallback("resources/sfx_bumblebee.wav").await.ok();
+
         // Initialize background layers for parallax scrolling (9 layers: 8 numbered + main bg)
         // Layers are ordered from back to front for proper rendering depth
         let background_layers = vec![
@@ -524,6 +533,10 @@ impl Game {
             // scroll_text_time: 0.0, // Commented out - removed wobbling BumbleBee text
             highscore_scroll_offset: 0.0,
             background_layers,
+            bee_x: SCREEN_WIDTH + 100.0, // Start off-screen to the right
+            bee_y: SCREEN_HEIGHT / 3.0,  // Start at 1/3 screen height
+            bee_active: false,
+            bee_next_spawn_timer: rand::gen_range(BEE_SPAWN_MIN_TIME, BEE_SPAWN_MAX_TIME),
             sky,
             clouds,
             far_field,
@@ -543,6 +556,7 @@ impl Game {
             shoot_sound,
             hit_sound,
             background_music,
+            bee_sound,
         }
     }
 
@@ -752,6 +766,76 @@ impl Game {
         self.explosions.retain(|explosion| !explosion.is_finished());
     }
 
+    fn update_bee(&mut self, dt: f32) {
+        // Update spawn timer
+        if !self.bee_active {
+            self.bee_next_spawn_timer -= dt;
+
+            // Spawn new bee when timer expires
+            if self.bee_next_spawn_timer <= 0.0 {
+                self.bee_active = true;
+                self.bee_x = SCREEN_WIDTH + 100.0; // Start off-screen to the right
+                self.bee_y = rand::gen_range(SCREEN_HEIGHT * 0.2, SCREEN_HEIGHT * 0.5); // Random height in upper portion
+                self.bee_next_spawn_timer = rand::gen_range(BEE_SPAWN_MIN_TIME, BEE_SPAWN_MAX_TIME);
+            }
+        } else {
+            // Move bee from right to left
+            self.bee_x -= BEE_FLY_SPEED * dt;
+
+            // Deactivate bee when it goes off-screen to the left
+            if self.bee_x < -100.0 {
+                self.bee_active = false;
+            }
+        }
+    }
+
+    fn update_bee_collisions(&mut self) {
+        if !self.bee_active {
+            return;
+        }
+
+        // Check collision between bee and each bullet
+        let bee_radius = 50.0; // Half of 100x100 bee size
+        let mut bee_hit = false;
+        let bee_pos = (self.bee_x + 50.0, self.bee_y + 50.0); // Center of bee
+
+        // Remove bullets that hit the bee
+        self.bullets.retain(|bullet| {
+            let dx = bullet.x - bee_pos.0;
+            let dy = bullet.y - bee_pos.1;
+            let distance = (dx * dx + dy * dy).sqrt();
+
+            if distance < bee_radius + COLLISION_RADIUS {
+                bee_hit = true;
+                false // Remove this bullet
+            } else {
+                true // Keep this bullet
+            }
+        });
+
+        // If bee was hit, award points, create explosion, and deactivate bee
+        if bee_hit {
+            self.score += BEE_POINTS;
+            log::info!("Bee hit! Awarded {} points. Total score: {}", BEE_POINTS, self.score);
+
+            // Create large explosion for the bee
+            self.explosions.push(Explosion::new_with_size(
+                self.bee_x + 50.0, // Center X
+                self.bee_y + 50.0, // Center Y
+                100.0,             // Width
+                100.0,             // Height
+            ));
+
+            // Play bee-specific sound
+            if let Some(ref sound) = self.bee_sound {
+                play_sound_once(sound);
+            }
+
+            // Deactivate bee
+            self.bee_active = false;
+        }
+    }
+
     fn update_collisions(&mut self) {
         let destroyed_positions = process_collisions(&mut self.enemies, &self.bullets);
 
@@ -869,11 +953,17 @@ impl Game {
                 // Update scrolling background
                 self.update_background_scroll(dt);
 
+                // Update flying bee
+                self.update_bee(dt);
+
                 // Update scrolling text
                 // self.update_scroll_text(dt); // Commented out - removed wobbling BumbleBee text
 
                 // Update bullets
                 self.update_bullets(dt);
+
+                // Check bee collisions (before enemy collisions to remove bullets that hit the bee)
+                self.update_bee_collisions();
 
                 // Update enemies
                 self.update_enemies(dt);
@@ -902,11 +992,13 @@ impl Game {
             }
             GameState::Playing => {
                 self.draw_background();
+                self.draw_bee();
                 // self.draw_scroll_text(); // Commented out - removed wobbling BumbleBee text
                 self.draw_player();
                 self.draw_bullets();
                 self.draw_enemies();
                 self.draw_explosions();
+                self.draw_wave_level();
                 self.draw_score();
             }
             GameState::GameOver => {
@@ -1018,15 +1110,30 @@ impl Game {
                 _ => continue, // Skip if beyond frames (shouldn't happen)
             };
 
-            // Draw explosion centered at the position
-            let half_width = texture.width() / 2.0;
-            let half_height = texture.height() / 2.0;
-            draw_texture(
-                texture,
-                explosion.x - half_width,
-                explosion.y - half_height,
-                WHITE,
-            );
+            // Check if explosion has custom size
+            if let Some((width, height)) = explosion.size {
+                // Draw explosion with custom size, centered at position
+                draw_texture_ex(
+                    texture,
+                    explosion.x - width / 2.0,
+                    explosion.y - height / 2.0,
+                    WHITE,
+                    DrawTextureParams {
+                        dest_size: Some(vec2(width, height)),
+                        ..Default::default()
+                    },
+                );
+            } else {
+                // Draw explosion at native texture size, centered at position
+                let half_width = texture.width() / 2.0;
+                let half_height = texture.height() / 2.0;
+                draw_texture(
+                    texture,
+                    explosion.x - half_width,
+                    explosion.y - half_height,
+                    WHITE,
+                );
+            }
         }
     }
 
@@ -1251,6 +1358,42 @@ impl Game {
 
         // Draw main text in red with larger font for bold effect
         self.draw_text_retro(&score_text, x_pos, 40.0, 32.0, RED);
+    }
+
+    fn draw_wave_level(&self) {
+        let wave_text = format!("Enemy round: {}", self.wave_number);
+        let padding = 20.0;
+
+        // Draw shadow for bold effect
+        self.draw_text_retro(
+            &wave_text,
+            padding + 2.0,
+            42.0,
+            32.0,
+            Color::from_rgba(0, 0, 0, 128),
+        );
+
+        // Draw main text in blue
+        self.draw_text_retro(&wave_text, padding, 40.0, 32.0, BLUE);
+    }
+
+    fn draw_bee(&self) {
+        // Only draw if bee is active
+        if self.bee_active {
+            let logo_width = 100.0;  // Scale the logo to reasonable size
+            let logo_height = 100.0;
+
+            draw_texture_ex(
+                &self.intro_icon,
+                self.bee_x,
+                self.bee_y,
+                WHITE,
+                DrawTextureParams {
+                    dest_size: Some(vec2(logo_width, logo_height)),
+                    ..Default::default()
+                },
+            );
+        }
     }
 
     fn handle_input(&mut self) {
