@@ -168,6 +168,36 @@ async fn load_font_fallback(path: &str) -> Option<Font> {
     }
 }
 
+/// Load C64-style shader for Game Over screen
+async fn load_c64_shader() -> Option<Material> {
+    let vertex_shader = include_str!("../shaders/c64_wave.vert");
+    let fragment_shader = include_str!("../shaders/c64_wave.frag");
+
+    let material = load_material(
+        ShaderSource::Glsl {
+            vertex: vertex_shader,
+            fragment: fragment_shader,
+        },
+        MaterialParams {
+            uniforms: vec![
+                UniformDesc::new("time", UniformType::Float1),
+            ],
+            ..Default::default()
+        },
+    );
+
+    match material {
+        Ok(mat) => {
+            log::info!("C64 shader loaded successfully");
+            Some(mat)
+        }
+        Err(e) => {
+            log::warn!("Failed to load C64 shader: {}", e);
+            None
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GameState {
     Menu,
@@ -348,6 +378,12 @@ struct Game {
     hit_sound: Option<Sound>,
     background_music: Option<Sound>,
     bee_sound: Option<Sound>,
+
+    // Shaders
+    c64_shader: Option<Material>,
+
+    // Wobble text effect
+    time: f32,
 }
 
 impl Game {
@@ -495,6 +531,9 @@ impl Game {
 
         let bee_sound = load_sound_fallback("resources/sfx_bumblebee.wav").await.ok();
 
+        // Load C64-style shader for Game Over screen
+        let c64_shader = load_c64_shader().await;
+
         // Initialize background layers for parallax scrolling (9 layers: 8 numbered + main bg)
         // Layers are ordered from back to front for proper rendering depth
         let background_layers = vec![
@@ -557,6 +596,8 @@ impl Game {
             hit_sound,
             background_music,
             bee_sound,
+            c64_shader,
+            time: 0.0,
         }
     }
 
@@ -927,6 +968,7 @@ impl Game {
             GameState::Menu => {
                 self.update_background_scroll(dt);
                 self.update_highscore_scroll(dt);
+                self.time += dt; // Update time for rainbow animation
                 // Play intro music if not already playing
                 if !self.intro_playing {
                     if let Some(ref sound) = self.intro_sound {
@@ -979,6 +1021,7 @@ impl Game {
             }
             GameState::GameOver => {
                 self.update_background_scroll(dt);
+                self.time += dt;
             }
         }
     }
@@ -1165,16 +1208,44 @@ impl Game {
         let icon_y = center_y - self.intro_icon.height() / 2.0; // Center vertically
         draw_texture(&self.intro_icon, icon_x, icon_y, WHITE);
 
-        // Title at the top
+        // Title at the top with C64-style rainbow wobble effect
         let title_text = "BUMBLEBEES";
-        let title_dims = self.measure_text_retro(title_text, 60);
-        self.draw_text_retro(
-            title_text,
-            center_x - title_dims.width / 2.0,
-            100.0,
-            60.0,
-            BLACK,
-        );
+        let title_font_size = 60.0;
+        let title_dims = self.measure_text_retro(title_text, title_font_size as u16);
+        let title_start_x = center_x - title_dims.width / 2.0;
+        let title_y = 100.0;
+        let mut x_offset = 0.0;
+
+        // Wobble parameters
+        let wobble_amplitude = 8.0;  // Slightly less wobble for title
+        let wobble_frequency = 0.12;
+        let wobble_speed = 4.0;
+
+        // Draw each letter with rainbow color cycling and wobble
+        for (i, character) in title_text.chars().enumerate() {
+            let char_str = character.to_string();
+            let char_dims = self.measure_text_retro(&char_str, title_font_size as u16);
+
+            // Calculate wobble effect
+            let y_offset = (x_offset * wobble_frequency + self.time * wobble_speed).sin() * wobble_amplitude;
+
+            // C64-style color cycling
+            let color_offset = self.time * 0.8 + i as f32 * 0.25;
+            let r = ((color_offset * 3.0).sin() * 0.5 + 0.5) * 255.0;
+            let g = ((color_offset * 3.0 + 2.094).sin() * 0.5 + 0.5) * 255.0;
+            let b = ((color_offset * 3.0 + 4.189).sin() * 0.5 + 0.5) * 255.0;
+            let rainbow_color = Color::from_rgba(r as u8, g as u8, b as u8, 255);
+
+            self.draw_text_retro(
+                &char_str,
+                title_start_x + x_offset,
+                title_y + y_offset,
+                title_font_size,
+                rainbow_color,
+            );
+
+            x_offset += char_dims.width;
+        }
         // Main menu panel - centered horizontally on screen
         let panel_width = 320.0;
         let panel_height = 200.0;
@@ -1303,16 +1374,46 @@ impl Game {
     }
 
     fn draw_game_over(&self) {
-        // Center "GAME OVER" text
         let game_over_text = "GAME OVER";
-        let game_over_dims = self.measure_text_retro(game_over_text, 80);
-        self.draw_text_retro(
-            game_over_text,
-            SCREEN_WIDTH / 2.0 - game_over_dims.width / 2.0,
-            200.0,
-            80.0,
-            RED,
-        );
+        let font_size = 80.0;
+        let text_dims = self.measure_text_retro(game_over_text, font_size as u16);
+        let mut x_offset = 0.0;
+
+        // Center the starting position of the text block
+        let start_x = SCREEN_WIDTH / 2.0 - text_dims.width / 2.0;
+        let start_y = 200.0;
+
+        // Wobble parameters
+        let wobble_amplitude = 10.0; // How far the letters move up and down
+        let wobble_frequency = 0.1;  // How wavy the text is
+        let wobble_speed = 5.0;      // How fast the wave moves
+
+        // Color cycling based on time (C64-style rainbow effect)
+        for (i, character) in game_over_text.chars().enumerate() {
+            let char_str = character.to_string();
+            let char_dims = self.measure_text_retro(&char_str, font_size as u16);
+
+            // Calculate wobble effect for each character
+            let y_offset = (x_offset * wobble_frequency + self.time * wobble_speed).sin() * wobble_amplitude;
+
+            // C64-style color cycling
+            let color_offset = self.time + i as f32 * 0.3;
+            let r = ((color_offset * 3.0).sin() * 0.5 + 0.5) * 255.0;
+            let g = ((color_offset * 3.0 + 2.094).sin() * 0.5 + 0.5) * 255.0;
+            let b = ((color_offset * 3.0 + 4.189).sin() * 0.5 + 0.5) * 255.0;
+            let rainbow_color = Color::from_rgba(r as u8, g as u8, b as u8, 255);
+
+            self.draw_text_retro(
+                &char_str,
+                start_x + x_offset,
+                start_y + y_offset,
+                font_size,
+                rainbow_color,
+            );
+
+            // Advance x_offset for the next character
+            x_offset += char_dims.width;
+        }
 
         // Center score text
         let score_text = format!("Final Score: {}", self.score);
