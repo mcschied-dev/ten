@@ -5,7 +5,6 @@ use macroquad::audio::{
     load_sound, play_sound, play_sound_once, stop_sound, PlaySoundParams, Sound,
 };
 use macroquad::prelude::*;
-use macroquad::texture::DrawTextureParams;
 
 mod constants;
 mod entities;
@@ -307,6 +306,7 @@ struct Game {
     player_name: String,
     highscore_manager: HighscoreManager,
     just_reset: bool, // Flag to prevent 'R' key from entering name after reset
+    intro_playing: bool, // Flag to track if intro music is currently playing
 
     // UI elements
     // scroll_text_x: Arc<Mutex<f32>>, // Commented out - removed wobbling BumbleBee text
@@ -326,7 +326,6 @@ struct Game {
     layer_7: Texture2D,
     layer_8: Texture2D,
     intro_icon: Texture2D,
-    custom_font: Texture2D,
     enemy_image: Texture2D,
     explosion_frame1: Texture2D,
     explosion_frame2: Texture2D,
@@ -336,6 +335,7 @@ struct Game {
     retro_font: Option<Font>,
 
     // Audio
+    intro_sound: Option<Sound>,
     shoot_sound: Option<Sound>,
     hit_sound: Option<Sound>,
     background_music: Option<Sound>,
@@ -368,72 +368,113 @@ impl Game {
 
         let sky = load_texture_fallback("resources/bg_layer_01.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[135, 206, 235, 255])); // Sky blue fallback
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to load sky texture, using fallback");
+                Texture2D::from_rgba8(1024, 768, &[135, 206, 235, 255])
+            }); // Sky blue fallback
 
         let clouds = load_texture_fallback("resources/bg_layer_02.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[255, 255, 255, 255]));
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to load clouds texture, using fallback");
+                Texture2D::from_rgba8(1024, 768, &[255, 255, 255, 255])
+            });
 
         let far_field = load_texture_fallback("resources/bg_layer_03.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[34, 139, 34, 255])); // Forest green fallback
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to load far_field texture, using fallback");
+                Texture2D::from_rgba8(1024, 768, &[34, 139, 34, 255])
+            }); // Forest green fallback
 
         let near_field = load_texture_fallback("resources/bg_main.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[0, 100, 0, 255])); // Dark green fallback
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to load near_field texture, using fallback");
+                Texture2D::from_rgba8(1024, 768, &[0, 100, 0, 255])
+            }); // Dark green fallback
 
         let layer_4 = load_texture_fallback("resources/bg_layer_04.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to load layer_4 texture, using fallback");
+                Texture2D::from_rgba8(1024, 768, &[150, 150, 150, 255])
+            });
 
         let layer_5 = load_texture_fallback("resources/bg_layer_05.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to load layer_5 texture, using fallback");
+                Texture2D::from_rgba8(1024, 768, &[150, 150, 150, 255])
+            });
 
         let layer_6 = load_texture_fallback("resources/bg_layer_06.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to load layer_6 texture, using fallback");
+                Texture2D::from_rgba8(1024, 768, &[150, 150, 150, 255])
+            });
 
         let layer_7 = load_texture_fallback("resources/bg_layer_07.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to load layer_7 texture, using fallback");
+                Texture2D::from_rgba8(1024, 768, &[150, 150, 150, 255])
+            });
 
         let layer_8 = load_texture_fallback("resources/bg_layer_08.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[150, 150, 150, 255]));
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to load layer_8 texture, using fallback");
+                Texture2D::from_rgba8(1024, 768, &[150, 150, 150, 255])
+            });
 
         let intro_icon = load_texture_fallback("resources/ui_logo.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[200, 200, 200, 255])); // Light gray fallback
-
-        let custom_font = load_texture_fallback("resources/ui_font.png")
-            .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[255, 255, 255, 255])); // White fallback
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to load intro_icon texture, using fallback");
+                Texture2D::from_rgba8(200, 200, &[200, 200, 200, 255])
+            }); // Light gray fallback
 
         let enemy_image = load_texture_fallback("resources/sprite_enemy.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(1, 1, &[255, 255, 255, 255]));
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to load enemy_image texture, using fallback");
+                Texture2D::from_rgba8(40, 40, &[255, 255, 255, 255])
+            });
 
         // Load explosion animation frames (3 frames for stop-motion effect)
         let explosion_frame1 = load_texture_fallback("resources/vfx_explosion_01.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(20, 20, &[255, 100, 0, 255])); // Orange fallback
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to load explosion_frame1 texture, using fallback");
+                Texture2D::from_rgba8(40, 40, &[255, 100, 0, 255])
+            }); // Orange fallback
 
         let explosion_frame2 = load_texture_fallback("resources/vfx_explosion_02.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(24, 24, &[255, 150, 0, 255])); // Brighter orange fallback
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to load explosion_frame2 texture, using fallback");
+                Texture2D::from_rgba8(40, 40, &[255, 150, 0, 255])
+            }); // Brighter orange fallback
 
         let explosion_frame3 = load_texture_fallback("resources/vfx_explosion_03.png")
             .await
-            .unwrap_or_else(|_| Texture2D::from_rgba8(28, 28, &[255, 200, 100, 255])); // Yellow fallback
+            .unwrap_or_else(|_| {
+                log::warn!("Failed to load explosion_frame3 texture, using fallback");
+                Texture2D::from_rgba8(40, 40, &[255, 200, 100, 255])
+            }); // Yellow fallback
 
         // Load TTF font for retro gaming style
         let retro_font = load_font_fallback("resources/font_retro_gaming.ttf").await;
+
         if retro_font.is_some() {
             log::info!("Retro Gaming font loaded successfully");
         } else {
             log::warn!("Failed to load Retro Gaming font, using default font");
         }
+
+        let intro_sound = load_sound_fallback("resources/intro.wav").await.ok();
 
         let shoot_sound = load_sound_fallback("resources/sfx_shoot.wav").await.ok();
 
@@ -473,6 +514,7 @@ impl Game {
             player_name: String::new(),
             highscore_manager: HighscoreManager::new("highscores.txt"),
             just_reset: false,
+            intro_playing: false,
             // scroll_text_x: Arc::new(Mutex::new(SCREEN_WIDTH)), // Commented out - removed wobbling BumbleBee text
             // scroll_direction: Arc::new(Mutex::new(-1.0)), // Commented out - removed wobbling BumbleBee text
             // scroll_text_time: 0.0, // Commented out - removed wobbling BumbleBee text
@@ -488,12 +530,12 @@ impl Game {
             layer_7,
             layer_8,
             intro_icon,
-            custom_font,
             enemy_image,
             explosion_frame1,
             explosion_frame2,
             explosion_frame3,
             retro_font,
+            intro_sound,
             shoot_sound,
             hit_sound,
             background_music,
@@ -505,6 +547,11 @@ impl Game {
         // Stop background music
         if let Some(ref sound) = self.background_music {
             stop_sound(sound);
+        }
+        // Stop intro music
+        if let Some(ref sound) = self.intro_sound {
+            stop_sound(sound);
+            self.intro_playing = false;
         }
         self.player.reset();
         self.bullets.clear();
@@ -540,6 +587,11 @@ impl Game {
     fn start_game(&mut self) {
         if !self.player_name.is_empty() {
             log::info!("Starting game for player: {}", self.player_name);
+            // Stop intro music
+            if let Some(ref sound) = self.intro_sound {
+                stop_sound(sound);
+                self.intro_playing = false;
+            }
             self.state = GameState::Playing;
             self.score = 0;
             self.wave_number = 1;
@@ -781,6 +833,19 @@ impl Game {
             GameState::Menu => {
                 self.update_background_scroll(dt);
                 self.update_highscore_scroll(dt);
+                // Play intro music if not already playing
+                if !self.intro_playing {
+                    if let Some(ref sound) = self.intro_sound {
+                        play_sound(
+                            sound,
+                            PlaySoundParams {
+                                looped: true,
+                                volume: 0.7,
+                            },
+                        );
+                        self.intro_playing = true;
+                    }
+                }
             }
             GameState::Playing => {
                 // Handle player input
@@ -955,64 +1020,7 @@ impl Game {
         }
     }
 
-    /// Draw text using the custom pixel font texture
-    ///
-    /// This function renders text using a custom 8x8 pixel font stored in a texture atlas.
-    /// The font contains A-Z, 0-9, dash (-), and period (.) characters arranged in a 16x4 grid.
-    ///
-    /// # Arguments
-    /// * `text` - The text string to render
-    /// * `x` - X coordinate for text positioning
-    /// * `y` - Y coordinate for text positioning
-    /// * `scale` - Scale factor for font size (1.0 = 8x8 pixels per character)
-    /// * `color` - Color to tint the font (white pixels in font become this color)
-    fn draw_custom_text(&self, text: &str, x: f32, y: f32, scale: f32, color: Color) {
-        let char_width = 8.0; // Assuming 8x8 pixel characters
-        let char_height = 8.0;
-        let chars_per_row = 16; // Assuming 16 characters per row in the font texture
 
-        let mut current_x = x;
-
-        for ch in text.chars() {
-            if ch == ' ' {
-                current_x += char_width * scale;
-                continue;
-            }
-
-            // Convert character to index (assuming ASCII, A-Z, 0-9, etc.)
-            let char_index = if ch.is_ascii_alphanumeric() || ch == '-' || ch == '.' {
-                match ch {
-                    '0'..='9' => (ch as u32 - '0' as u32) as usize,
-                    'A'..='Z' => (ch as u32 - 'A' as u32 + 10) as usize,
-                    'a'..='z' => (ch as u32 - 'a' as u32 + 10) as usize,
-                    '-' => 36,
-                    '.' => 37,
-                    _ => 0, // Default to '0'
-                }
-            } else {
-                0
-            };
-
-            // Calculate position in font texture
-            let tex_x = (char_index % chars_per_row) as f32 * char_width;
-            let tex_y = (char_index / chars_per_row) as f32 * char_height;
-
-            // Draw the character with the specified color
-            draw_texture_ex(
-                &self.custom_font,
-                current_x,
-                y,
-                color,
-                DrawTextureParams {
-                    source: Some(Rect::new(tex_x, tex_y, char_width, char_height)),
-                    dest_size: Some(Vec2::new(char_width * scale, char_height * scale)),
-                    ..Default::default()
-                },
-            );
-
-            current_x += char_width * scale;
-        }
-    }
 
     fn draw_menu(&self) {
         // Draw parallax backgrounds

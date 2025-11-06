@@ -2,12 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>BumbleBees - Space Invaders Clone</title>
+    <title>BumbleBees</title>
     <style>
         body {
             margin: 0;
             padding: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(
+            0deg,
+            rgba(76,168,106,1) 0%,
+            rgba(138,199,244,1) 100%
+            );
+            filter: saturate(1.1) brightness(1.05);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             display: flex;
             flex-direction: column;
@@ -115,7 +120,7 @@
     </div>
 
     <div id="game-container">
-        <h1 id="title">🐝 BumbleBees</h1>
+    
         <canvas id="glcanvas" width="1024" height="575" tabindex="0" style="image-rendering: pixelated;"></canvas>
         <div class="info">
             Use Arrow Keys to move | Space to shoot | Press Space to start
@@ -124,6 +129,203 @@
 
     <script src="https://not-fl3.github.io/miniquad-samples/mq_js_bundle.js"></script>
     <script>
+        // localStorage bridge for WASM
+        // Global references that will be set by the plugin
+        var wasmMemory = null;
+        var wasmExports = null;
+        var stringCache = [];
+        var memoryAllocatorOffset = 2000000; // Start allocation at 2MB
+
+        // Try to capture WASM memory if not already available
+        function tryCaptureMemory() {
+            if (wasmMemory) return true;
+
+            // Try all possible ways to get memory
+            if (typeof wasm_exports !== 'undefined' && wasm_exports.memory) {
+                wasmMemory = wasm_exports.memory;
+                return true;
+            }
+            if (typeof wasm !== 'undefined') {
+                if (wasm.memory) {
+                    wasmMemory = wasm.memory;
+                    return true;
+                }
+                if (wasm.instance && wasm.instance.exports && wasm.instance.exports.memory) {
+                    wasmMemory = wasm.instance.exports.memory;
+                    return true;
+                }
+            }
+            // Try GL object which miniquad uses
+            if (typeof GL !== 'undefined' && GL.context && GL.context.GLctx && GL.context.GLctx.canvas) {
+                // Check if there's a WASM instance attached
+                const canvas = GL.context.GLctx.canvas;
+                if (canvas._wasmModule && canvas._wasmModule.exports && canvas._wasmModule.exports.memory) {
+                    wasmMemory = canvas._wasmModule.exports.memory;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Helper to read C string from WASM memory
+        function readCString(ptr) {
+            if (!ptr) return null;
+
+            // Try to capture memory if we don't have it yet
+            if (!wasmMemory && !tryCaptureMemory()) {
+                return null;
+            }
+
+            try {
+                const memory = new Uint8Array(wasmMemory.buffer);
+                let end = ptr;
+                while (end < memory.length && memory[end] !== 0) {
+                    end++;
+                }
+
+                if (end >= memory.length) {
+                    return null;
+                }
+
+                const bytes = memory.subarray(ptr, end);
+                return new TextDecoder('utf-8').decode(bytes);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // Allocate string in WASM memory using bump allocator
+        function allocateString(str) {
+            if (!str) return 0;
+
+            // Try to capture memory if we don't have it yet
+            if (!wasmMemory && !tryCaptureMemory()) {
+                return 0;
+            }
+
+            try {
+                const encoder = new TextEncoder();
+                const bytes = encoder.encode(str);
+                const requiredSize = bytes.length + 1; // +1 for null terminator
+
+                // Check if we need to grow memory
+                if (memoryAllocatorOffset + requiredSize > wasmMemory.buffer.byteLength) {
+                    const pagesNeeded = Math.ceil((memoryAllocatorOffset + requiredSize - wasmMemory.buffer.byteLength) / 65536);
+                    // Limit growth to prevent excessive memory usage
+                    if (pagesNeeded > 4) { // Max 256KB growth at once
+                        console.warn("WASM: String too large for allocation, skipping");
+                        return 0;
+                    }
+                    wasmMemory.grow(pagesNeeded);
+                }
+
+                const baseAddr = memoryAllocatorOffset;
+                const memory = new Uint8Array(wasmMemory.buffer);
+
+                // Copy string bytes
+                memory.set(bytes, baseAddr);
+                // Null terminate
+                memory[baseAddr + bytes.length] = 0;
+
+                // Store in cache for cleanup reference
+                stringCache.push({
+                    addr: baseAddr,
+                    size: requiredSize,
+                    str: str
+                });
+
+                // Advance allocator
+                memoryAllocatorOffset += requiredSize;
+
+                // Align to 4-byte boundary for better performance
+                memoryAllocatorOffset = (memoryAllocatorOffset + 3) & ~3;
+
+                return baseAddr;
+            } catch (e) {
+                console.error("WASM: Failed to allocate string:", e);
+                return 0;
+            }
+        }
+
+        // localStorage get function
+        window.js_localstorage_get = function(key_ptr) {
+            try {
+                const key = readCString(key_ptr);
+                if (!key) return 0;
+
+                const value = localStorage.getItem(key);
+                if (value === null) return 0;
+
+                return allocateString(value);
+            } catch (e) {
+                return 0;
+            }
+        };
+
+        // localStorage set function
+        window.js_localstorage_set = function(key_ptr, value_ptr) {
+            try {
+                const key = readCString(key_ptr);
+                const value = readCString(value_ptr);
+
+                if (!key || value === null) return;
+
+                localStorage.setItem(key, value);
+            } catch (e) {
+                // Silent fail
+            }
+        };
+
+        // Free string and clean up cache
+        window.js_free_string = function(ptr) {
+            if (!ptr) return;
+
+            // Remove from cache
+            const index = stringCache.findIndex(entry => entry.addr === ptr);
+            if (index >= 0) {
+                stringCache.splice(index, 1);
+            }
+
+            // Note: We don't actually free memory in WASM, but we could reset
+            // the allocator if all strings are freed (cache becomes empty)
+            if (stringCache.length === 0) {
+                memoryAllocatorOffset = 2000000; // Reset to start
+            }
+        };
+
+        // Register plugin to inject functions and capture memory
+        miniquad_add_plugin({
+            register_plugin: function(importObject) {
+                if (!importObject.env) {
+                    importObject.env = {};
+                }
+
+                // Inject our functions
+                importObject.env.js_localstorage_get = window.js_localstorage_get;
+                importObject.env.js_localstorage_set = window.js_localstorage_set;
+                importObject.env.js_free_string = window.js_free_string;
+            },
+
+            on_init: function() {
+                // Try to capture memory
+                tryCaptureMemory();
+            },
+
+            update: function() {},
+            draw: function() {},
+            ui: function() {},
+            resize: function() {},
+            mouse_down: function() {},
+            mouse_up: function() {},
+            mouse_move: function() {},
+            raw_mouse_move: function() {},
+            char_event: function() {},
+            key_down: function() {},
+            key_up: function() {},
+            quit_requested_event: function() {},
+        });
+
         // The miniquad bundle will automatically call load() and start the game
         // We just need to hide the loading indicator once the game starts
         window.addEventListener('DOMContentLoaded', function() {
@@ -134,13 +336,11 @@
             // Automatically focus the canvas when page loads
             setTimeout(function() {
                 canvas.focus();
-                console.log('Canvas focused');
             }, 500);
 
             // Re-focus canvas when clicked
             canvas.addEventListener('click', function() {
                 canvas.focus();
-                console.log('Canvas re-focused on click');
             });
 
             // Re-focus canvas when mouse enters
@@ -150,7 +350,6 @@
 
             // Call load function from mq_js_bundle
             if (typeof load === 'function') {
-                console.log('Loading WASM with miniquad...');
                 load("ten.wasm?v=" + Date.now());
 
                 // Hide loading screen after a short delay (game will start automatically)
@@ -167,7 +366,6 @@
                     canvas.focus();
                 }, 1000);
             } else {
-                console.error('load() function not found from mq_js_bundle.js');
                 document.getElementById('loading').innerHTML = '❌ Failed to load miniquad bundle';
             }
         });

@@ -42,7 +42,8 @@ impl HighscoreManager {
 
     /// Save a new highscore
     pub fn save_highscore(&self, name: &str, score: u32) {
-        let mut entries = self.load_highscores();
+        // Load existing scores WITHOUT demo data
+        let mut entries = self.load_highscores_for_saving();
 
         // Add new entry
         entries.push(HighscoreEntry::new(name.to_string(), score));
@@ -58,6 +59,19 @@ impl HighscoreManager {
         #[cfg(not(target_arch = "wasm32"))]
         {
             self.save_to_file(&entries);
+        }
+    }
+
+    /// Load highscores for saving (no demo data)
+    fn load_highscores_for_saving(&self) -> Vec<HighscoreEntry> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.load_from_localstorage_raw()
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.load_from_file()
         }
     }
 
@@ -118,33 +132,126 @@ impl HighscoreManager {
         }
     }
 
-    // WASM LocalStorage implementation using quad-storage
+    // WASM LocalStorage implementation using custom FFI bridge (with demo scores)
     #[cfg(target_arch = "wasm32")]
     fn load_from_localstorage(&self) -> Vec<HighscoreEntry> {
-        use quad_storage::STORAGE;
+        let entries = self.load_from_localstorage_raw();
 
-        // Try to load from localStorage
-        if let Some(json_str) = STORAGE.lock().unwrap().get(&self.storage_key) {
-            if let Ok(entries) = serde_json::from_str::<Vec<HighscoreEntry>>(&json_str) {
-                println!("WASM: Loaded {} highscores from localStorage", entries.len());
-                return entries;
-            }
+        // If no data found, return demo scores for display
+        if entries.is_empty() {
+            println!("WASM: No data found in localStorage, returning demo scores");
+            return vec![
+                HighscoreEntry::new("PLAYER1".to_string(), 5000),
+                HighscoreEntry::new("PLAYER2".to_string(), 4500),
+                HighscoreEntry::new("PLAYER3".to_string(), 4000),
+                HighscoreEntry::new("PLAYER4".to_string(), 3500),
+                HighscoreEntry::new("PLAYER5".to_string(), 3000),
+                HighscoreEntry::new("PLAYER6".to_string(), 2500),
+                HighscoreEntry::new("PLAYER7".to_string(), 2000),
+                HighscoreEntry::new("PLAYER8".to_string(), 1500),
+                HighscoreEntry::new("PLAYER9".to_string(), 1000),
+                HighscoreEntry::new("PLAYER10".to_string(), 500),
+            ];
         }
 
-        // Return empty vec if no data found
-        println!("WASM: No highscores found in localStorage, starting fresh");
-        Vec::new()
+        entries
+    }
+
+    // WASM LocalStorage raw implementation (no demo scores)
+    #[cfg(target_arch = "wasm32")]
+    fn load_from_localstorage_raw(&self) -> Vec<HighscoreEntry> {
+        use std::ffi::CString;
+        use std::os::raw::c_char;
+
+        extern "C" {
+            fn js_localstorage_get(key: *const c_char) -> *mut c_char;
+            fn js_free_string(ptr: *mut c_char);
+        }
+
+        println!("WASM: Attempting to load highscores from localStorage key: {}", self.storage_key);
+
+        unsafe {
+            let key = match CString::new(self.storage_key.as_str()) {
+                Ok(k) => k,
+                Err(e) => {
+                    println!("WASM: Failed to create CString for key: {:?}", e);
+                    return Vec::new();
+                }
+            };
+
+            let value_ptr = js_localstorage_get(key.as_ptr());
+            if value_ptr.is_null() {
+                println!("WASM: No data found in localStorage");
+                return Vec::new();
+            }
+
+            let c_str = std::ffi::CStr::from_ptr(value_ptr);
+            let json_str = match c_str.to_str() {
+                Ok(s) => s,
+                Err(e) => {
+                    println!("WASM: Failed to convert C string to Rust string: {:?}", e);
+                    js_free_string(value_ptr);
+                    return Vec::new();
+                }
+            };
+
+            println!("WASM: Found data in localStorage: {}", json_str);
+
+            let entries = match serde_json::from_str::<Vec<HighscoreEntry>>(json_str) {
+                Ok(e) => {
+                    println!("WASM: Successfully loaded {} highscores from localStorage", e.len());
+                    e
+                }
+                Err(e) => {
+                    println!("WASM: Failed to parse highscores JSON: {:?}", e);
+                    Vec::new()
+                }
+            };
+
+            js_free_string(value_ptr);
+            entries
+        }
     }
 
     #[cfg(target_arch = "wasm32")]
     fn save_to_localstorage(&self, entries: &[HighscoreEntry]) {
-        use quad_storage::STORAGE;
+        use std::ffi::CString;
+        use std::os::raw::c_char;
 
-        if let Ok(json_str) = serde_json::to_string(entries) {
-            STORAGE.lock().unwrap().set(&self.storage_key, &json_str);
-            println!("WASM: Saved {} highscores to localStorage", entries.len());
-        } else {
-            println!("WASM: Failed to serialize highscores");
+        extern "C" {
+            fn js_localstorage_set(key: *const c_char, value: *const c_char);
+        }
+
+        println!("WASM: Attempting to save {} highscores to localStorage", entries.len());
+
+        match serde_json::to_string(entries) {
+            Ok(json_str) => {
+                println!("WASM: Serialized highscores to JSON: {}", json_str);
+
+                unsafe {
+                    let key = match CString::new(self.storage_key.as_str()) {
+                        Ok(k) => k,
+                        Err(e) => {
+                            println!("WASM: Failed to create CString for key: {:?}", e);
+                            return;
+                        }
+                    };
+
+                    let value = match CString::new(json_str.as_str()) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            println!("WASM: Failed to create CString for value: {:?}", e);
+                            return;
+                        }
+                    };
+
+                    js_localstorage_set(key.as_ptr(), value.as_ptr());
+                    println!("WASM: Successfully saved to localStorage key: {}", self.storage_key);
+                }
+            }
+            Err(e) => {
+                println!("WASM: Failed to serialize highscores: {:?}", e);
+            }
         }
     }
 }
