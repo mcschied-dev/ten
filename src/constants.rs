@@ -30,5 +30,11 @@ pub const POINTS_PER_ENEMY: u32 = 10;
 /// Enemy speed increase per wave in pixels per second
 pub const SPEED_INCREASE_PER_WAVE: f32 = 20.0;
 
+/// Bullet speed increase per wave in pixels per second
+pub const BULLET_SPEED_INCREASE_PER_WAVE: f32 = 30.0;
+
+/// Player movement speed increase per wave in pixels per second
+pub const PLAYER_SPEED_INCREASE_PER_WAVE: f32 = 15.0;
+
 /// Player base width increase per wave in pixels
 pub const BASE_WIDTH_INCREASE: f32 = 20.0;

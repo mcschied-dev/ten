@@ -5,8 +5,9 @@ use crate::entities::Enemy;
 
 /// Generate enemies for a given wave number.
 ///
-/// Each wave generates a grid of enemies with progressively more rows.
-/// The formula is: rows = 2 + wave_number, with a constant 10 columns.
+/// Uses Space Invaders-style progression: fixed formation size with increasing speed.
+/// Maximum 5 rows × 10 columns = 50 enemies (like classic Space Invaders).
+/// Speed increases with wave number to maintain challenge without overwhelming numbers.
 ///
 /// # Arguments
 ///
@@ -20,17 +21,18 @@ use crate::entities::Enemy;
 ///
 /// ```
 /// # use ten::systems::wave::generate_wave;
-/// let wave_1 = generate_wave(1);  // 30 enemies (3 rows x 10 columns)
-/// let wave_2 = generate_wave(2);  // 40 enemies (4 rows x 10 columns)
+/// let wave_1 = generate_wave(1);  // 50 enemies (5 rows x 10 columns)
+/// let wave_10 = generate_wave(10); // Still 50 enemies, but faster
 /// ```
 #[must_use]
 pub fn generate_wave(wave: u32) -> Vec<Enemy> {
-    let rows = 2 + wave as usize;
+    // Cap at 5 rows like classic Space Invaders (5 × 11 = 55, we use 5 × 10 = 50)
+    let rows = 5;
     let columns = 10;
     let enemy_count = rows * columns;
 
     log::info!(
-        "Generating wave {} with {} enemies ({} rows x {} columns)",
+        "Generating wave {} with {} enemies ({} rows x {} columns) - Space Invaders style!",
         wave,
         enemy_count,
         rows,
@@ -72,15 +74,15 @@ mod tests {
     #[test]
     fn test_generate_enemies_wave_1() {
         let enemies = generate_wave(1);
-        // Wave 1 should have 3 rows (2 + 1) and 10 columns
-        assert_eq!(enemies.len(), 30);
+        // All waves should have 5 rows and 10 columns (Space Invaders style)
+        assert_eq!(enemies.len(), 50);
     }
 
     #[test]
     fn test_generate_enemies_wave_2() {
         let enemies = generate_wave(2);
-        // Wave 2 should have 4 rows (2 + 2) and 10 columns
-        assert_eq!(enemies.len(), 40);
+        // All waves should have same formation size
+        assert_eq!(enemies.len(), 50);
     }
 
     #[test]
@@ -99,38 +101,38 @@ mod tests {
         assert_eq!(enemies[1].y, 100.0); // 50.0 + 50.0
 
         // Check enemies are spaced horizontally (next column, first row)
-        // Wave 1 has 3 rows, so enemies[3] is first enemy of second column
-        assert_eq!(enemies[3].x, 302.0); // 242.0 + 60.0
-        assert_eq!(enemies[3].y, 50.0);
+        // All waves have 5 rows, so enemies[5] is first enemy of second column
+        assert_eq!(enemies[5].x, 302.0); // 242.0 + 60.0
+        assert_eq!(enemies[5].y, 50.0);
     }
 
     #[test]
     fn test_generate_wave_zero() {
         let enemies = generate_wave(0);
-        // Wave 0 should have 2 rows (2 + 0)
-        assert_eq!(enemies.len(), 20); // 2 rows × 10 columns
+        // All waves have same size (5 rows × 10 columns)
+        assert_eq!(enemies.len(), 50);
     }
 
     #[test]
     fn test_generate_wave_high_number() {
         let enemies = generate_wave(10);
-        // Wave 10 should have 12 rows (2 + 10)
-        assert_eq!(enemies.len(), 120); // 12 rows × 10 columns
+        // All waves have same size regardless of wave number
+        assert_eq!(enemies.len(), 50);
     }
 
     #[test]
     fn test_enemy_positions_wave_2() {
         let enemies = generate_wave(2);
 
-        // Wave 2 has 4 rows
-        assert_eq!(enemies.len(), 40);
+        // All waves have 5 rows × 10 columns = 50 enemies
+        assert_eq!(enemies.len(), 50);
 
         // Check positions are still valid (centered at x=242.0, y=50.0)
         assert_eq!(enemies[0].x, 242.0);
         assert_eq!(enemies[0].y, 50.0);
 
-        // Last enemy in first column should be at row 4
-        assert_eq!(enemies[3].x, 242.0);
-        assert_eq!(enemies[3].y, 200.0); // 50 + 3 * 50
+        // Last enemy in first column should be at row 5 (index 4)
+        assert_eq!(enemies[4].x, 242.0);
+        assert_eq!(enemies[4].y, 250.0); // 50 + 4 * 50
     }
 }

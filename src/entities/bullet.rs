@@ -1,7 +1,5 @@
 //! Bullet entity implementation.
 
-use crate::constants::BULLET_SPEED;
-
 /// Represents a bullet fired by the player.
 ///
 /// Bullets move upward at a constant speed until they either
@@ -32,8 +30,9 @@ impl Bullet {
     /// # Arguments
     ///
     /// * `dt` - Delta time in seconds
-    pub fn update(&mut self, dt: f32) {
-        self.y -= BULLET_SPEED * dt;
+    /// * `speed` - Bullet speed in pixels per second
+    pub fn update(&mut self, dt: f32, speed: f32) {
+        self.y -= speed * dt;
     }
 
     /// Check if bullet has moved outside the screen boundaries.
@@ -62,7 +61,7 @@ mod tests {
     #[test]
     fn test_bullet_movement() {
         let mut bullet = Bullet::new(100.0, 200.0);
-        bullet.update(1.0); // 1 second
+        bullet.update(1.0, crate::constants::BULLET_SPEED); // 1 second
 
         // Should have moved up by BULLET_SPEED
         assert_eq!(bullet.y, 200.0 - crate::constants::BULLET_SPEED);
