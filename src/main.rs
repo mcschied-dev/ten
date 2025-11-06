@@ -306,6 +306,7 @@ struct Game {
     // Player and highscore
     player_name: String,
     highscore_manager: HighscoreManager,
+    just_reset: bool, // Flag to prevent 'R' key from entering name after reset
 
     // UI elements
     // scroll_text_x: Arc<Mutex<f32>>, // Commented out - removed wobbling BumbleBee text
@@ -471,6 +472,7 @@ impl Game {
             score: 0,
             player_name: String::new(),
             highscore_manager: HighscoreManager::new("highscores.txt"),
+            just_reset: false,
             // scroll_text_x: Arc::new(Mutex::new(SCREEN_WIDTH)), // Commented out - removed wobbling BumbleBee text
             // scroll_direction: Arc::new(Mutex::new(-1.0)), // Commented out - removed wobbling BumbleBee text
             // scroll_text_time: 0.0, // Commented out - removed wobbling BumbleBee text
@@ -513,6 +515,7 @@ impl Game {
         self.wave_number = 1;
         self.score = 0;
         self.state = GameState::Menu;
+        self.just_reset = true; // Skip character input on next frame
         for layer in &mut self.background_layers {
             let texture_width = match layer.layer_type {
                 BackgroundLayerType::Sky => self.sky.width(),
@@ -1047,18 +1050,6 @@ impl Game {
             60.0,
             BLACK,
         );
-
-        // Subtitle
-        let subtitle_text = "Space Invaders Remake";
-        let subtitle_dims = self.measure_text_retro(subtitle_text, 24);
-        self.draw_text_retro(
-            subtitle_text,
-            center_x - subtitle_dims.width / 2.0,
-            170.0,
-            24.0,
-            Color::from_rgba(100, 100, 100, 255),
-        );
-
         // Main menu panel - centered horizontally on screen
         let panel_width = 320.0;
         let panel_height = 200.0;
@@ -1169,12 +1160,12 @@ impl Game {
             WHITE,
         );
 
-        // Highscores section - bottom right
+        // Highscores section - aligned with name entry panel
         let highscore_x = SCREEN_WIDTH - 300.0;
-        let highscore_y = SCREEN_HEIGHT - 250.0;
+        let highscore_y = panel_y; // Align with the name entry panel
 
         // Highscores header
-        self.draw_text_retro("HIGH SCORES", highscore_x + 10.0, highscore_y, 24.0, BLACK);
+        self.draw_text_retro("HIGH SCORES", highscore_x + 10.0, highscore_y + 10.0, 24.0, BLACK);
 
         // Display highscores
         let top_scores = self.highscore_manager.get_top_scores(5); // Show only top 5
@@ -1224,22 +1215,35 @@ impl Game {
     fn draw_score(&self) {
         let score_text = format!("Score: {}", self.score);
 
+        // Use fixed position based on maximum expected score width to prevent jumping
+        // Reserve space for "Score: 99999" to keep position stable
+        let max_score_text = "Score: 99999";
+        let max_text_dims = self.measure_text_retro(max_score_text, 32);
+        let padding = 20.0;
+        let x_pos = SCREEN_WIDTH - max_text_dims.width - padding;
+
         // Draw shadow for bold effect
         self.draw_text_retro(
             &score_text,
-            SCREEN_WIDTH - 178.0,
+            x_pos + 2.0,
             42.0,
             32.0,
             Color::from_rgba(0, 0, 0, 128),
         );
 
         // Draw main text in red with larger font for bold effect
-        self.draw_text_retro(&score_text, SCREEN_WIDTH - 180.0, 40.0, 32.0, RED);
+        self.draw_text_retro(&score_text, x_pos, 40.0, 32.0, RED);
     }
 
     fn handle_input(&mut self) {
         match self.state {
             GameState::Menu => {
+                // Skip input processing if we just reset (prevents 'R' from appearing in name)
+                if self.just_reset {
+                    self.just_reset = false;
+                    return;
+                }
+
                 // Handle text input
                 if let Some(character) = get_last_key_pressed() {
                     println!("Key pressed: {:?}", character);
@@ -1303,6 +1307,8 @@ impl Game {
             }
             GameState::GameOver => {
                 if is_key_pressed(KeyCode::R) {
+                    // Consume any pending character input to prevent 'r' from appearing in name field
+                    let _ = get_char_pressed();
                     self.reset();
                 }
             }

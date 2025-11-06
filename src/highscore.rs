@@ -118,31 +118,34 @@ impl HighscoreManager {
         }
     }
 
-    // WASM LocalStorage implementation
-    // Note: Disabled for now as it requires wasm-bindgen
-    // Highscores will be in-memory only for WASM builds
+    // WASM LocalStorage implementation using quad-storage
     #[cfg(target_arch = "wasm32")]
     fn load_from_localstorage(&self) -> Vec<HighscoreEntry> {
-        println!("WASM: LocalStorage disabled - using demo highscores");
-        // Return some demo highscores for WASM builds
-        vec![
-            HighscoreEntry::new("ALICE".to_string(), 5000),
-            HighscoreEntry::new("BOB".to_string(), 4500),
-            HighscoreEntry::new("CHARLIE".to_string(), 4000),
-            HighscoreEntry::new("DIANA".to_string(), 3500),
-            HighscoreEntry::new("EVE".to_string(), 3000),
-            HighscoreEntry::new("FRANK".to_string(), 2500),
-            HighscoreEntry::new("GRACE".to_string(), 2000),
-            HighscoreEntry::new("HENRY".to_string(), 1500),
-            HighscoreEntry::new("IVY".to_string(), 1000),
-            HighscoreEntry::new("JACK".to_string(), 500),
-        ]
+        use quad_storage::STORAGE;
+
+        // Try to load from localStorage
+        if let Some(json_str) = STORAGE.lock().unwrap().get(&self.storage_key) {
+            if let Ok(entries) = serde_json::from_str::<Vec<HighscoreEntry>>(&json_str) {
+                println!("WASM: Loaded {} highscores from localStorage", entries.len());
+                return entries;
+            }
+        }
+
+        // Return empty vec if no data found
+        println!("WASM: No highscores found in localStorage, starting fresh");
+        Vec::new()
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn save_to_localstorage(&self, _entries: &[HighscoreEntry]) {
-        // No-op for WASM builds without wasm-bindgen
-        println!("WASM: LocalStorage disabled - highscores not persisted");
+    fn save_to_localstorage(&self, entries: &[HighscoreEntry]) {
+        use quad_storage::STORAGE;
+
+        if let Ok(json_str) = serde_json::to_string(entries) {
+            STORAGE.lock().unwrap().set(&self.storage_key, &json_str);
+            println!("WASM: Saved {} highscores to localStorage", entries.len());
+        } else {
+            println!("WASM: Failed to serialize highscores");
+        }
     }
 }
 
