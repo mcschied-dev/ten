@@ -111,6 +111,64 @@ async fn load_sound_fallback(path: &str) -> Result<Sound, macroquad::Error> {
     }
 }
 
+/// Load TTF font with fallback paths for bundle compatibility
+async fn load_font_fallback(path: &str) -> Option<Font> {
+    // For WASM builds, try to load directly
+    #[cfg(target_arch = "wasm32")]
+    {
+        if let Ok(bytes) = load_file(path).await {
+            if let Ok(font) = load_ttf_font_from_bytes(&bytes) {
+                return Some(font);
+            }
+        }
+        return None;
+    }
+
+    // For desktop builds, try fallback paths
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use std::fs;
+
+        // Try the path as-is first
+        if let Ok(bytes) = fs::read(path) {
+            if let Ok(font) = load_ttf_font_from_bytes(&bytes) {
+                return Some(font);
+            }
+        }
+
+        // If we're in a bundle, try relative to executable
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                // Try relative to executable directory
+                let exe_relative = exe_dir.join(path);
+                if exe_relative.exists() {
+                    if let Ok(bytes) = fs::read(&exe_relative) {
+                        if let Ok(font) = load_ttf_font_from_bytes(&bytes) {
+                            return Some(font);
+                        }
+                    }
+                }
+
+                // Try in bundle Resources directory (macOS)
+                if exe_dir.ends_with("MacOS") {
+                    if let Some(contents) = exe_dir.parent() {
+                        let resources_path = contents.join("Resources").join(path);
+                        if resources_path.exists() {
+                            if let Ok(bytes) = fs::read(&resources_path) {
+                                if let Ok(font) = load_ttf_font_from_bytes(&bytes) {
+                                    return Some(font);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GameState {
     Menu,
@@ -273,6 +331,9 @@ struct Game {
     explosion_frame2: Texture2D,
     explosion_frame3: Texture2D,
 
+    // Font
+    retro_font: Option<Font>,
+
     // Audio
     shoot_sound: Option<Sound>,
     hit_sound: Option<Sound>,
@@ -365,6 +426,14 @@ impl Game {
             .await
             .unwrap_or_else(|_| Texture2D::from_rgba8(28, 28, &[255, 200, 100, 255])); // Yellow fallback
 
+        // Load TTF font for retro gaming style
+        let retro_font = load_font_fallback("resources/font_retro_gaming.ttf").await;
+        if retro_font.is_some() {
+            log::info!("Retro Gaming font loaded successfully");
+        } else {
+            log::warn!("Failed to load Retro Gaming font, using default font");
+        }
+
         let shoot_sound = load_sound_fallback("resources/sfx_shoot.wav").await.ok();
 
         let hit_sound = load_sound_fallback("resources/sfx_hit.wav").await.ok();
@@ -422,6 +491,7 @@ impl Game {
             explosion_frame1,
             explosion_frame2,
             explosion_frame3,
+            retro_font,
             shoot_sound,
             hit_sound,
             background_music,
@@ -488,6 +558,35 @@ impl Game {
             }
         } else {
             log::warn!("Cannot start game without player name");
+        }
+    }
+
+    /// Draw text with the custom retro font, or fallback to default font
+    fn draw_text_retro(&self, text: &str, x: f32, y: f32, font_size: f32, color: Color) {
+        if let Some(ref font) = self.retro_font {
+            draw_text_ex(
+                text,
+                x,
+                y,
+                TextParams {
+                    font: Some(font),
+                    font_size: font_size as u16,
+                    color,
+                    ..Default::default()
+                },
+            );
+        } else {
+            // Fallback to default font
+            draw_text(text, x, y, font_size, color);
+        }
+    }
+
+    /// Measure text dimensions with the custom retro font
+    fn measure_text_retro(&self, text: &str, font_size: u16) -> TextDimensions {
+        if let Some(ref font) = self.retro_font {
+            measure_text(text, Some(font), font_size, 1.0)
+        } else {
+            measure_text(text, None, font_size, 1.0)
         }
     }
 
@@ -940,8 +1039,8 @@ impl Game {
 
         // Title at the top
         let title_text = "BUMBLEBEES";
-        let title_dims = measure_text(title_text, None, 60, 1.0);
-        draw_text(
+        let title_dims = self.measure_text_retro(title_text, 60);
+        self.draw_text_retro(
             title_text,
             center_x - title_dims.width / 2.0,
             100.0,
@@ -951,8 +1050,8 @@ impl Game {
 
         // Subtitle
         let subtitle_text = "Space Invaders Remake";
-        let subtitle_dims = measure_text(subtitle_text, None, 24, 1.0);
-        draw_text(
+        let subtitle_dims = self.measure_text_retro(subtitle_text, 24);
+        self.draw_text_retro(
             subtitle_text,
             center_x - subtitle_dims.width / 2.0,
             170.0,
@@ -987,9 +1086,9 @@ impl Game {
 
         // Name input section inside panel
         let label_text = "Enter Your Name:";
-        let label_dims = measure_text(label_text, None, 20, 1.0);
+        let label_dims = self.measure_text_retro(label_text, 20);
         let label_x = panel_x + (panel_width - label_dims.width) / 2.0; // Center within panel
-        draw_text(label_text, label_x, panel_y + 25.0, 20.0, BLACK);
+        self.draw_text_retro(label_text, label_x, panel_y + 25.0, 20.0, BLACK);
 
         // Name input box
         let box_width = 280.0;
@@ -1012,20 +1111,20 @@ impl Game {
         if !self.player_name.is_empty() {
             // Center the entered name both horizontally and vertically in the box
             let font_size = 24.0;
-            let name_dims = measure_text(&self.player_name, None, font_size as u16, 1.0);
+            let name_dims = self.measure_text_retro(&self.player_name, font_size as u16);
             let name_x = box_x + (box_width - name_dims.width) / 2.0;
             let name_y = box_y + (box_height + font_size) / 2.0 - font_size * 0.25; // Better vertical centering
-            draw_text(&self.player_name, name_x, name_y, font_size, BLACK);
+            self.draw_text_retro(&self.player_name, name_x, name_y, font_size, BLACK);
         } else {
             // Center placeholder text both horizontally and vertically in the box
             let placeholder = "Type your name...";
             let placeholder_font_size = 22.0;
             let placeholder_dims =
-                measure_text(placeholder, None, placeholder_font_size as u16, 1.0);
+                self.measure_text_retro(placeholder, placeholder_font_size as u16);
             let placeholder_x = box_x + (box_width - placeholder_dims.width) / 2.0;
             let placeholder_y =
                 box_y + (box_height + placeholder_font_size) / 2.0 - placeholder_font_size * 0.25; // Better vertical centering
-            draw_text(
+            self.draw_text_retro(
                 placeholder,
                 placeholder_x,
                 placeholder_y,
@@ -1058,11 +1157,11 @@ impl Game {
         // Button text - properly centered
         let button_text = "START GAME";
         let button_font_size = 24.0;
-        let button_text_dims = measure_text(button_text, None, button_font_size as u16, 1.0);
+        let button_text_dims = self.measure_text_retro(button_text, button_font_size as u16);
         let button_text_x = button_x + (button_width - button_text_dims.width) / 2.0;
         let button_text_y =
             button_y + (button_height + button_font_size) / 2.0 - button_font_size * 0.25; // Better vertical centering
-        draw_text(
+        self.draw_text_retro(
             button_text,
             button_text_x,
             button_text_y,
@@ -1075,7 +1174,7 @@ impl Game {
         let highscore_y = SCREEN_HEIGHT - 250.0;
 
         // Highscores header
-        self.draw_custom_text("HIGH SCORES", highscore_x + 10.0, highscore_y, 1.8, BLACK);
+        self.draw_text_retro("HIGH SCORES", highscore_x + 10.0, highscore_y, 24.0, BLACK);
 
         // Display highscores
         let top_scores = self.highscore_manager.get_top_scores(5); // Show only top 5
@@ -1083,15 +1182,15 @@ impl Game {
             let score_text = format!("{}. {} - {}", i + 1, entry.name, entry.score);
             let y_pos = highscore_y + 35.0 + i as f32 * 25.0;
 
-            self.draw_custom_text(&score_text, highscore_x + 10.0, y_pos, 1.2, BLACK);
+            self.draw_text_retro(&score_text, highscore_x + 10.0, y_pos, 18.0, BLACK);
         }
     }
 
     fn draw_game_over(&self) {
         // Center "GAME OVER" text
         let game_over_text = "GAME OVER";
-        let game_over_dims = measure_text(game_over_text, None, 80, 1.0);
-        draw_text(
+        let game_over_dims = self.measure_text_retro(game_over_text, 80);
+        self.draw_text_retro(
             game_over_text,
             SCREEN_WIDTH / 2.0 - game_over_dims.width / 2.0,
             200.0,
@@ -1101,8 +1200,8 @@ impl Game {
 
         // Center score text
         let score_text = format!("Final Score: {}", self.score);
-        let score_dims = measure_text(&score_text, None, 50, 1.0);
-        draw_text(
+        let score_dims = self.measure_text_retro(&score_text, 50);
+        self.draw_text_retro(
             &score_text,
             SCREEN_WIDTH / 2.0 - score_dims.width / 2.0,
             300.0,
@@ -1112,8 +1211,8 @@ impl Game {
 
         // Center "Press R" text
         let press_r_text = "Press R to Return to Menu";
-        let press_r_dims = measure_text(press_r_text, None, 30, 1.0);
-        draw_text(
+        let press_r_dims = self.measure_text_retro(press_r_text, 30);
+        self.draw_text_retro(
             press_r_text,
             SCREEN_WIDTH / 2.0 - press_r_dims.width / 2.0,
             400.0,
@@ -1126,7 +1225,7 @@ impl Game {
         let score_text = format!("Score: {}", self.score);
 
         // Draw shadow for bold effect
-        draw_text(
+        self.draw_text_retro(
             &score_text,
             SCREEN_WIDTH - 178.0,
             42.0,
@@ -1135,7 +1234,7 @@ impl Game {
         );
 
         // Draw main text in red with larger font for bold effect
-        draw_text(&score_text, SCREEN_WIDTH - 180.0, 40.0, 32.0, RED);
+        self.draw_text_retro(&score_text, SCREEN_WIDTH - 180.0, 40.0, 32.0, RED);
     }
 
     fn handle_input(&mut self) {
