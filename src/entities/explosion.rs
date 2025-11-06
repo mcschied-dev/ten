@@ -18,6 +18,8 @@ pub struct Explosion {
     pub total_frames: usize,
     /// Whether animation is finished
     pub finished: bool,
+    /// Optional custom size (width, height). If None, uses texture size.
+    pub size: Option<(f32, f32)>,
 }
 
 impl Explosion {
@@ -37,6 +39,29 @@ impl Explosion {
             frame_duration: 0.1, // 100ms per frame = 300ms total animation
             total_frames: 3,
             finished: false,
+            size: None,
+        }
+    }
+
+    /// Create a new explosion with a custom size
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - X coordinate of explosion center
+    /// * `y` - Y coordinate of explosion center
+    /// * `width` - Width of the explosion
+    /// * `height` - Height of the explosion
+    #[must_use]
+    pub fn new_with_size(x: f32, y: f32, width: f32, height: f32) -> Self {
+        Self {
+            x,
+            y,
+            current_frame: 0,
+            frame_timer: 0.0,
+            frame_duration: 0.1, // 100ms per frame = 300ms total animation
+            total_frames: 3,
+            finished: false,
+            size: Some((width, height)),
         }
     }
 

@@ -28,13 +28,25 @@ pub const COLLISION_RADIUS: f32 = 20.0;
 pub const POINTS_PER_ENEMY: u32 = 10;
 
 /// Enemy speed increase per wave in pixels per second
-pub const SPEED_INCREASE_PER_WAVE: f32 = 20.0;
+pub const SPEED_INCREASE_PER_WAVE: f32 = 50.0;
 
 /// Bullet speed increase per wave in pixels per second
 pub const BULLET_SPEED_INCREASE_PER_WAVE: f32 = 30.0;
 
 /// Player movement speed increase per wave in pixels per second
-pub const PLAYER_SPEED_INCREASE_PER_WAVE: f32 = 15.0;
+pub const PLAYER_SPEED_INCREASE_PER_WAVE: f32 = 45.0;
 
 /// Player base width increase per wave in pixels
 pub const BASE_WIDTH_INCREASE: f32 = 20.0;
+
+/// Flying bee (hummel) movement speed in pixels per second
+pub const BEE_FLY_SPEED: f32 = 400.0;
+
+/// Minimum time between bee spawns in seconds
+pub const BEE_SPAWN_MIN_TIME: f32 = 10.0;
+
+/// Maximum time between bee spawns in seconds
+pub const BEE_SPAWN_MAX_TIME: f32 = 30.0;
+
+/// Points awarded for shooting the flying bee
+pub const BEE_POINTS: u32 = 1000;
