@@ -353,6 +353,10 @@ struct Game {
     bee_active: bool,              // Whether bee is currently flying
     bee_next_spawn_timer: f32,     // Time until next bee spawn
 
+    // Mobile touch input
+    touch_shooting: bool,          // Whether player is touching shoot zone
+    name_input_focused: bool,      // Whether name input is focused (for mobile keyboard)
+
     // Resources
     sky: Texture2D,
     clouds: Texture2D,
@@ -576,6 +580,8 @@ impl Game {
             bee_y: SCREEN_HEIGHT / 3.0,  // Start at 1/3 screen height
             bee_active: false,
             bee_next_spawn_timer: rand::gen_range(BEE_SPAWN_MIN_TIME, BEE_SPAWN_MAX_TIME),
+            touch_shooting: false,
+            name_input_focused: false,
             sky,
             clouds,
             far_field,
@@ -624,6 +630,8 @@ impl Game {
         self.score = 0;
         self.state = GameState::Menu;
         self.just_reset = true; // Skip character input on next frame
+        self.touch_shooting = false;
+        self.name_input_focused = false;
         for layer in &mut self.background_layers {
             let texture_width = match layer.layer_type {
                 BackgroundLayerType::Sky => self.sky.width(),
@@ -984,14 +992,6 @@ impl Game {
                 }
             }
             GameState::Playing => {
-                // Handle player input
-                if is_key_down(KeyCode::Left) {
-                    self.player.move_left(dt, self.player_speed);
-                }
-                if is_key_down(KeyCode::Right) {
-                    self.player.move_right(dt, self.player_speed);
-                }
-
                 // Update scrolling background
                 self.update_background_scroll(dt);
 
@@ -1041,6 +1041,7 @@ impl Game {
                 self.draw_bullets();
                 self.draw_enemies();
                 self.draw_explosions();
+                self.draw_touch_indicators(); // Show touch zones when touching
                 self.draw_wave_level();
                 self.draw_score();
             }
@@ -1304,7 +1305,11 @@ impl Game {
             self.draw_text_retro(&self.player_name, name_x, name_y, font_size, BLACK);
         } else {
             // Center placeholder text both horizontally and vertically in the box
-            let placeholder = "Type your name...";
+            let placeholder = if touches().is_empty() {
+                "Type your name..."
+            } else {
+                "Tap to enter name..."
+            };
             let placeholder_font_size = 22.0;
             let placeholder_dims =
                 self.measure_text_retro(placeholder, placeholder_font_size as u16);
@@ -1426,12 +1431,16 @@ impl Game {
             BLACK,
         );
 
-        // Center "Press R" text
-        let press_r_text = "Press R to Return to Menu";
-        let press_r_dims = self.measure_text_retro(press_r_text, 30);
+        // Center "Press R" or "Tap" text depending on input method
+        let return_text = if touches().is_empty() {
+            "Press R to Return to Menu"
+        } else {
+            "Tap to Return to Menu"
+        };
+        let return_dims = self.measure_text_retro(return_text, 30);
         self.draw_text_retro(
-            press_r_text,
-            SCREEN_WIDTH / 2.0 - press_r_dims.width / 2.0,
+            return_text,
+            SCREEN_WIDTH / 2.0 - return_dims.width / 2.0,
             400.0,
             30.0,
             Color::from_rgba(0, 0, 0, 255),
@@ -1497,6 +1506,64 @@ impl Game {
         }
     }
 
+    /// Draw subtle touch zone indicators for mobile gameplay
+    fn draw_touch_indicators(&self) {
+        // Only show indicators if there are active touches (mobile device)
+        if touches().is_empty() {
+            return;
+        }
+
+        // Draw semi-transparent overlay split in half
+        // Left side: Movement zone (blue tint)
+        draw_rectangle(
+            0.0,
+            0.0,
+            SCREEN_WIDTH / 2.0,
+            SCREEN_HEIGHT,
+            Color::from_rgba(100, 150, 255, 30),
+        );
+
+        // Right side: Shooting zone (red tint)
+        draw_rectangle(
+            SCREEN_WIDTH / 2.0,
+            0.0,
+            SCREEN_WIDTH / 2.0,
+            SCREEN_HEIGHT,
+            Color::from_rgba(255, 100, 100, 30),
+        );
+
+        // Draw center divider line
+        draw_line(
+            SCREEN_WIDTH / 2.0,
+            0.0,
+            SCREEN_WIDTH / 2.0,
+            SCREEN_HEIGHT,
+            2.0,
+            Color::from_rgba(255, 255, 255, 100),
+        );
+
+        // Draw labels
+        let move_text = "MOVE";
+        let move_dims = self.measure_text_retro(move_text, 24);
+        self.draw_text_retro(
+            move_text,
+            SCREEN_WIDTH / 4.0 - move_dims.width / 2.0,
+            SCREEN_HEIGHT - 30.0,
+            24.0,
+            Color::from_rgba(255, 255, 255, 180),
+        );
+
+        let shoot_text = "SHOOT";
+        let shoot_dims = self.measure_text_retro(shoot_text, 24);
+        self.draw_text_retro(
+            shoot_text,
+            SCREEN_WIDTH * 3.0 / 4.0 - shoot_dims.width / 2.0,
+            SCREEN_HEIGHT - 30.0,
+            24.0,
+            Color::from_rgba(255, 255, 255, 180),
+        );
+    }
+
     fn handle_input(&mut self) {
         match self.state {
             GameState::Menu => {
@@ -1506,7 +1573,42 @@ impl Game {
                     return;
                 }
 
-                // Handle text input
+                // Calculate input box position (matches draw_menu layout)
+                let center_x = SCREEN_WIDTH / 2.0;
+                let center_y = SCREEN_HEIGHT / 2.0;
+                let panel_x = center_x - 160.0; // panel_width / 2 = 320 / 2 = 160
+                let panel_y = center_y - 100.0; // panel_height / 2 = 200 / 2 = 100
+                let box_width = 280.0;
+                let box_height = 40.0;
+                let box_x = panel_x + (320.0 - box_width) / 2.0;
+                let box_y = panel_y + 55.0;
+                let input_box_rect = Rect::new(box_x, box_y, box_width, box_height);
+
+                // Handle touch input for mobile
+                let touch_list = touches();
+                if !touch_list.is_empty() {
+                    for touch in touch_list {
+                        let touch_pos = Vec2::new(touch.position.x, touch.position.y);
+
+                        // Check if touch is on input box - activate keyboard focus
+                        if input_box_rect.contains(touch_pos) && touch.phase == macroquad::input::TouchPhase::Started {
+                            self.name_input_focused = true;
+                            println!("Touch on input box - keyboard should appear");
+                        }
+
+                        // Check if touch is on start button
+                        let button_x = panel_x + (320.0 - 280.0) / 2.0;
+                        let button_y = panel_y + 120.0;
+                        let button_rect = Rect::new(button_x, button_y, 280.0, 45.0);
+
+                        if button_rect.contains(touch_pos) && touch.phase == macroquad::input::TouchPhase::Started {
+                            println!("Touch on start button");
+                            self.start_game();
+                        }
+                    }
+                }
+
+                // Handle keyboard text input (works on desktop and mobile when keyboard is shown)
                 if let Some(character) = get_last_key_pressed() {
                     println!("Key pressed: {:?}", character);
                     match character {
@@ -1522,7 +1624,7 @@ impl Game {
                     }
                 }
 
-                // Handle character input
+                // Handle character input (from keyboard or mobile keyboard)
                 if let Some(ch) = get_char_pressed() {
                     println!("Char pressed: {}", ch);
                     if ch.is_alphanumeric() && self.player_name.len() < 20 {
@@ -1531,28 +1633,24 @@ impl Game {
                     }
                 }
 
-                // Handle mouse click on start button
+                // Handle mouse click on input box (desktop)
                 if is_mouse_button_pressed(MouseButton::Left) {
                     let (mouse_x, mouse_y) = mouse_position();
-                    println!("Mouse clicked at: ({}, {})", mouse_x, mouse_y);
-                    // Button position matches the centered panel layout
-                    let center_x = SCREEN_WIDTH / 2.0;
-                    let center_y = SCREEN_HEIGHT / 2.0;
-                    let panel_x = center_x - 160.0; // panel_width / 2 = 320 / 2 = 160
-                    let panel_y = center_y - 100.0; // panel_height / 2 = 200 / 2 = 100
-                    let button_x = panel_x + (320.0 - 280.0) / 2.0; // Center within panel
+
+                    // Check if click is on input box
+                    if input_box_rect.contains(Vec2::new(mouse_x, mouse_y)) {
+                        self.name_input_focused = true;
+                        println!("Click on input box");
+                    }
+
+                    // Check if click is on start button
+                    let button_x = panel_x + (320.0 - 280.0) / 2.0;
                     let button_y = panel_y + 120.0;
                     let button_rect = Rect::new(button_x, button_y, 280.0, 45.0);
-                    println!(
-                        "Button rect: x={}, y={}, w={}, h={}",
-                        button_rect.x, button_rect.y, button_rect.w, button_rect.h
-                    );
 
                     if button_rect.contains(Vec2::new(mouse_x, mouse_y)) {
                         println!("Button clicked!");
                         self.start_game();
-                    } else {
-                        println!("Click outside button");
                     }
                 }
 
@@ -1563,11 +1661,65 @@ impl Game {
                 }
             }
             GameState::Playing => {
+                // Handle touch input for mobile gameplay
+                let touch_list = touches();
+
+                if !touch_list.is_empty() {
+                    // Reset touch shooting flag
+                    let mut new_touch_shooting = false;
+
+                    for touch in touch_list {
+                        let touch_x = touch.position.x;
+                        // touch_y could be used for future vertical controls
+
+                        // Left half of screen: Move player horizontally
+                        // Touch position directly controls player position
+                        if touch_x < SCREEN_WIDTH / 2.0 {
+                            // Map touch X position to player X position
+                            self.player.x = touch_x.clamp(self.player.base_width / 2.0, SCREEN_WIDTH - self.player.base_width / 2.0);
+                        }
+
+                        // Right half of screen: Shoot
+                        if touch_x >= SCREEN_WIDTH / 2.0 {
+                            new_touch_shooting = true;
+                        }
+                    }
+
+                    // Shoot on touch start (not continuous)
+                    if new_touch_shooting && !self.touch_shooting {
+                        self.shoot();
+                    }
+
+                    self.touch_shooting = new_touch_shooting;
+                } else {
+                    self.touch_shooting = false;
+                }
+
+                // Keyboard controls (desktop fallback)
+                if is_key_down(KeyCode::Left) {
+                    self.player.move_left(get_frame_time(), self.player_speed);
+                }
+                if is_key_down(KeyCode::Right) {
+                    self.player.move_right(get_frame_time(), self.player_speed);
+                }
                 if is_key_pressed(KeyCode::Space) {
                     self.shoot();
                 }
             }
             GameState::GameOver => {
+                // Handle touch for game over screen
+                let touch_list = touches();
+                if !touch_list.is_empty() {
+                    // Any touch restarts the game
+                    for touch in touch_list {
+                        if touch.phase == macroquad::input::TouchPhase::Started {
+                            self.reset();
+                            break;
+                        }
+                    }
+                }
+
+                // Keyboard fallback
                 if is_key_pressed(KeyCode::R) {
                     // Consume any pending character input to prevent 'r' from appearing in name field
                     let _ = get_char_pressed();
