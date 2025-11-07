@@ -886,7 +886,7 @@ impl Game {
     }
 
     fn update_collisions(&mut self) {
-        let destroyed_positions = process_collisions(&mut self.enemies, &self.bullets);
+        let destroyed_positions = process_collisions(&mut self.enemies, &mut self.bullets);
 
         if !destroyed_positions.is_empty() {
             // Play hit sound
