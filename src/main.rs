@@ -168,35 +168,6 @@ async fn load_font_fallback(path: &str) -> Option<Font> {
     }
 }
 
-/// Load C64-style shader for Game Over screen
-async fn load_c64_shader() -> Option<Material> {
-    let vertex_shader = include_str!("../shaders/c64_wave.vert");
-    let fragment_shader = include_str!("../shaders/c64_wave.frag");
-
-    let material = load_material(
-        ShaderSource::Glsl {
-            vertex: vertex_shader,
-            fragment: fragment_shader,
-        },
-        MaterialParams {
-            uniforms: vec![
-                UniformDesc::new("time", UniformType::Float1),
-            ],
-            ..Default::default()
-        },
-    );
-
-    match material {
-        Ok(mat) => {
-            log::info!("C64 shader loaded successfully");
-            Some(mat)
-        }
-        Err(e) => {
-            log::warn!("Failed to load C64 shader: {}", e);
-            None
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GameState {
@@ -383,9 +354,6 @@ struct Game {
     background_music: Option<Sound>,
     bee_sound: Option<Sound>,
 
-    // Shaders
-    c64_shader: Option<Material>,
-
     // Wobble text effect
     time: f32,
 }
@@ -535,9 +503,6 @@ impl Game {
 
         let bee_sound = load_sound_fallback("resources/sfx_bumblebee.wav").await.ok();
 
-        // Load C64-style shader for Game Over screen
-        let c64_shader = load_c64_shader().await;
-
         // Initialize background layers for parallax scrolling (9 layers: 8 numbered + main bg)
         // Layers are ordered from back to front for proper rendering depth
         let background_layers = vec![
@@ -602,7 +567,6 @@ impl Game {
             hit_sound,
             background_music,
             bee_sound,
-            c64_shader,
             time: 0.0,
         }
     }
@@ -1235,7 +1199,9 @@ impl Game {
         let icon_y = center_y - self.intro_icon.height() / 2.0; // Center vertically
         draw_texture(&self.intro_icon, icon_x, icon_y, WHITE);
 
-        // Title at the top with C64-style rainbow wobble effect
+        // ========================================================================
+        // Title with C64-style rainbow wobble effect (CPU-based)
+        // ========================================================================
         let title_text = "BUMBLEBEES";
         let title_font_size = 60.0;
         let title_dims = self.measure_text_retro(title_text, title_font_size as u16);
@@ -1244,7 +1210,7 @@ impl Game {
         let mut x_offset = 0.0;
 
         // Wobble parameters
-        let wobble_amplitude = 8.0;  // Slightly less wobble for title
+        let wobble_amplitude = 8.0;
         let wobble_frequency = 0.12;
         let wobble_speed = 4.0;
 
@@ -1410,21 +1376,21 @@ impl Game {
         let text_dims = self.measure_text_retro(game_over_text, font_size as u16);
         let mut x_offset = 0.0;
 
-        // Center the starting position of the text block
+        // Center the text
         let start_x = SCREEN_WIDTH / 2.0 - text_dims.width / 2.0;
         let start_y = 200.0;
 
         // Wobble parameters
-        let wobble_amplitude = 10.0; // How far the letters move up and down
-        let wobble_frequency = 0.1;  // How wavy the text is
-        let wobble_speed = 5.0;      // How fast the wave moves
+        let wobble_amplitude = 10.0;
+        let wobble_frequency = 0.1;
+        let wobble_speed = 5.0;
 
-        // Color cycling based on time (C64-style rainbow effect)
+        // Draw each letter with rainbow color cycling and wobble (CPU-based)
         for (i, character) in game_over_text.chars().enumerate() {
             let char_str = character.to_string();
             let char_dims = self.measure_text_retro(&char_str, font_size as u16);
 
-            // Calculate wobble effect for each character
+            // Calculate wobble effect
             let y_offset = (x_offset * wobble_frequency + self.time * wobble_speed).sin() * wobble_amplitude;
 
             // C64-style color cycling
@@ -1442,11 +1408,12 @@ impl Game {
                 rainbow_color,
             );
 
-            // Advance x_offset for the next character
             x_offset += char_dims.width;
         }
 
-        // Center score text
+        // ========================================================================
+        // Additional UI elements (score, instructions)
+        // ========================================================================
         let score_text = format!("Final Score: {}", self.score);
         let score_dims = self.measure_text_retro(&score_text, 50);
         self.draw_text_retro(
@@ -1457,7 +1424,6 @@ impl Game {
             BLACK,
         );
 
-        // Center "Press R" or "Tap" text depending on input method
         let return_text = if touches().is_empty() {
             "Press R to Return to Menu"
         } else {
