@@ -59,21 +59,23 @@ impl Player {
 
     /// Fire bullets based on current upgrade level.
     ///
-    /// # Returns
+    /// Push bullets into the provided buffer, avoiding per-shot allocations.
     ///
-    /// A vector of bullets evenly spaced across the player's base width.
-    #[must_use]
-    pub fn shoot(&self) -> Vec<Bullet> {
-        let mut bullets = Vec::new();
+    /// # Arguments
+    ///
+    /// * `out` - Buffer receiving the bullets created this frame
+    pub fn shoot(&self, out: &mut Vec<Bullet>) {
+        let start_len = out.len();
+        out.reserve(self.available_shots as usize);
         let offset = self.base_width / (self.available_shots + 1) as f32;
 
         for i in 0..self.available_shots {
             let bullet_x = self.x - self.base_width / 2.0 + offset * (i as f32 + 1.0);
-            bullets.push(Bullet::new(bullet_x, SCREEN_HEIGHT - 50.0));
+            out.push(Bullet::new(bullet_x, SCREEN_HEIGHT - 50.0));
         }
 
-        log::debug!("Player fired {} bullets", bullets.len());
-        bullets
+        let spawned = out.len() - start_len;
+        log::debug!("Player fired {} bullets", spawned);
     }
 
     /// Upgrade player with more shots and wider base.
@@ -211,7 +213,8 @@ mod tests {
         player.upgrade(); // Now has 2 shots
         player.upgrade(); // Now has 3 shots
 
-        let bullets = player.shoot();
+        let mut bullets = Vec::new();
+        player.shoot(&mut bullets);
         assert_eq!(bullets.len(), 3);
 
         // Check bullet positions are spread across player width

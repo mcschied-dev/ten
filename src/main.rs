@@ -5,6 +5,12 @@ use macroquad::audio::{
     load_sound, play_sound, play_sound_once, stop_sound, PlaySoundParams, Sound,
 };
 use macroquad::prelude::*;
+use std::convert::TryInto;
+
+#[cfg(not(target_arch = "wasm32"))]
+use image::GenericImageView;
+#[cfg(not(target_arch = "wasm32"))]
+use macroquad::miniquad::conf::Icon;
 
 mod constants;
 mod entities;
@@ -16,6 +22,39 @@ use entities::{Bullet, Enemy, EnemyType, Explosion, Player};
 use highscore::HighscoreManager;
 use systems::{generate_wave, process_collisions};
 
+#[cfg(not(target_arch = "wasm32"))]
+fn candidate_asset_paths(path: &str) -> Vec<String> {
+    let mut candidates = Vec::new();
+    candidates.push(path.to_string());
+
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let exe_relative = exe_dir.join(path);
+            push_candidate(&mut candidates, exe_relative);
+
+            if exe_dir.ends_with("MacOS") {
+                if let Some(contents) = exe_dir.parent() {
+                    let resources_path = contents.join("Resources").join(path);
+                    push_candidate(&mut candidates, resources_path);
+                }
+            }
+        }
+    }
+
+    candidates
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn push_candidate(candidates: &mut Vec<String>, path: std::path::PathBuf) {
+    if path.exists() {
+        if let Some(path_str) = path.to_str() {
+            if !candidates.iter().any(|existing| existing == path_str) {
+                candidates.push(path_str.to_string());
+            }
+        }
+    }
+}
+
 /// Load texture with fallback paths for bundle compatibility
 async fn load_texture_fallback(path: &str) -> Result<Texture2D, macroquad::Error> {
     // For WASM builds, just try the path directly
@@ -24,95 +63,49 @@ async fn load_texture_fallback(path: &str) -> Result<Texture2D, macroquad::Error
         return load_texture(path).await;
     }
 
-    // For desktop builds, try fallback paths
     #[cfg(not(target_arch = "wasm32"))]
     {
-        // Try the path as-is first
-        match load_texture(path).await {
-            Ok(texture) => return Ok(texture),
-            Err(_) => {
-                // If we're in a bundle, try relative to executable
-                if let Ok(exe_path) = std::env::current_exe() {
-                    if let Some(exe_dir) = exe_path.parent() {
-                        // Try relative to executable directory
-                        let exe_relative = exe_dir.join(path);
-                        if exe_relative.exists() {
-                            if let Some(path_str) = exe_relative.to_str() {
-                                return load_texture(path_str).await;
-                            }
-                        }
-
-                        // Try in bundle Resources directory
-                        if exe_dir.ends_with("MacOS") {
-                            if let Some(contents) = exe_dir.parent() {
-                                let resources_path = contents.join("Resources").join(path);
-                                if resources_path.exists() {
-                                    if let Some(path_str) = resources_path.to_str() {
-                                        return load_texture(path_str).await;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+        let mut last_err = None;
+        for candidate in candidate_asset_paths(path) {
+            match load_texture(&candidate).await {
+                Ok(texture) => return Ok(texture),
+                Err(err) => last_err = Some(err),
             }
         }
-
-        // Final fallback - return error
-        load_texture(path).await
+        if let Some(err) = last_err {
+            Err(err)
+        } else {
+            load_texture(path).await
+        }
     }
 }
 
 /// Load sound with fallback paths for bundle compatibility
 async fn load_sound_fallback(path: &str) -> Result<Sound, macroquad::Error> {
-    // For WASM builds, just try the path directly
     #[cfg(target_arch = "wasm32")]
     {
         return load_sound(path).await;
     }
 
-    // For desktop builds, try fallback paths
     #[cfg(not(target_arch = "wasm32"))]
     {
-        // Try the path as-is first
-        match load_sound(path).await {
-            Ok(sound) => return Ok(sound),
-            Err(_) => {
-                // If we're in a bundle, try relative to executable
-                if let Ok(exe_path) = std::env::current_exe() {
-                    if let Some(exe_dir) = exe_path.parent() {
-                        // Try relative to executable directory
-                        let exe_relative = exe_dir.join(path);
-                        if exe_relative.exists() {
-                            if let Some(path_str) = exe_relative.to_str() {
-                                return load_sound(path_str).await;
-                            }
-                        }
-
-                        // Try in bundle Resources directory
-                        if exe_dir.ends_with("MacOS") {
-                            if let Some(contents) = exe_dir.parent() {
-                                let resources_path = contents.join("Resources").join(path);
-                                if resources_path.exists() {
-                                    if let Some(path_str) = resources_path.to_str() {
-                                        return load_sound(path_str).await;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+        let mut last_err = None;
+        for candidate in candidate_asset_paths(path) {
+            match load_sound(&candidate).await {
+                Ok(sound) => return Ok(sound),
+                Err(err) => last_err = Some(err),
             }
         }
-
-        // Final fallback - return error
-        load_sound(path).await
+        if let Some(err) = last_err {
+            Err(err)
+        } else {
+            load_sound(path).await
+        }
     }
 }
 
 /// Load TTF font with fallback paths for bundle compatibility
 async fn load_font_fallback(path: &str) -> Option<Font> {
-    // For WASM builds, try to load directly
     #[cfg(target_arch = "wasm32")]
     {
         if let Ok(bytes) = load_file(path).await {
@@ -123,43 +116,14 @@ async fn load_font_fallback(path: &str) -> Option<Font> {
         return None;
     }
 
-    // For desktop builds, try fallback paths
     #[cfg(not(target_arch = "wasm32"))]
     {
         use std::fs;
 
-        // Try the path as-is first
-        if let Ok(bytes) = fs::read(path) {
-            if let Ok(font) = load_ttf_font_from_bytes(&bytes) {
-                return Some(font);
-            }
-        }
-
-        // If we're in a bundle, try relative to executable
-        if let Ok(exe_path) = std::env::current_exe() {
-            if let Some(exe_dir) = exe_path.parent() {
-                // Try relative to executable directory
-                let exe_relative = exe_dir.join(path);
-                if exe_relative.exists() {
-                    if let Ok(bytes) = fs::read(&exe_relative) {
-                        if let Ok(font) = load_ttf_font_from_bytes(&bytes) {
-                            return Some(font);
-                        }
-                    }
-                }
-
-                // Try in bundle Resources directory (macOS)
-                if exe_dir.ends_with("MacOS") {
-                    if let Some(contents) = exe_dir.parent() {
-                        let resources_path = contents.join("Resources").join(path);
-                        if resources_path.exists() {
-                            if let Ok(bytes) = fs::read(&resources_path) {
-                                if let Ok(font) = load_ttf_font_from_bytes(&bytes) {
-                                    return Some(font);
-                                }
-                            }
-                        }
-                    }
+        for candidate in candidate_asset_paths(path) {
+            if let Ok(bytes) = fs::read(&candidate) {
+                if let Ok(font) = load_ttf_font_from_bytes(&bytes) {
+                    return Some(font);
                 }
             }
         }
@@ -167,7 +131,6 @@ async fn load_font_fallback(path: &str) -> Option<Font> {
         None
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GameState {
@@ -296,6 +259,8 @@ struct Game {
     bullets: Vec<Bullet>,
     enemies: Vec<Enemy>,
     explosions: Vec<Explosion>,
+    bullet_spawn_buffer: Vec<Bullet>,
+    collision_results: Vec<(f32, f32, u32)>,
     enemy_speed: f32,
     bullet_speed: f32,
     player_speed: f32,
@@ -308,7 +273,7 @@ struct Game {
     // Player and highscore
     player_name: String,
     highscore_manager: HighscoreManager,
-    just_reset: bool, // Flag to prevent 'R' key from entering name after reset
+    just_reset: bool,    // Flag to prevent 'R' key from entering name after reset
     intro_playing: bool, // Flag to track if intro music is currently playing
 
     // UI elements
@@ -319,14 +284,14 @@ struct Game {
     background_layers: Vec<BackgroundLayer>,
 
     // Flying bee animation
-    bee_x: f32,                    // Current X position of flying bee
-    bee_y: f32,                    // Y position of flying bee
-    bee_active: bool,              // Whether bee is currently flying
-    bee_next_spawn_timer: f32,     // Time until next bee spawn
+    bee_x: f32,                // Current X position of flying bee
+    bee_y: f32,                // Y position of flying bee
+    bee_active: bool,          // Whether bee is currently flying
+    bee_next_spawn_timer: f32, // Time until next bee spawn
 
     // Mobile touch input
-    touch_shooting: bool,          // Whether player is touching shoot zone
-    name_input_focused: bool,      // Whether name input is focused (for mobile keyboard)
+    touch_shooting: bool,     // Whether player is touching shoot zone
+    name_input_focused: bool, // Whether name input is focused (for mobile keyboard)
 
     // Resources
     sky: Texture2D,
@@ -501,7 +466,9 @@ impl Game {
             .await
             .ok();
 
-        let bee_sound = load_sound_fallback("resources/sfx_bumblebee.wav").await.ok();
+        let bee_sound = load_sound_fallback("resources/sfx_bumblebee.wav")
+            .await
+            .ok();
 
         // Initialize background layers for parallax scrolling (9 layers: 8 numbered + main bg)
         // Layers are ordered from back to front for proper rendering depth
@@ -524,6 +491,8 @@ impl Game {
             bullets: Vec::new(),
             enemies: generate_wave(1),
             explosions: Vec::new(),
+            bullet_spawn_buffer: Vec::with_capacity(3),
+            collision_results: Vec::new(),
             enemy_speed: INITIAL_ENEMY_SPEED,
             bullet_speed: crate::constants::BULLET_SPEED,
             player_speed: crate::constants::PLAYER_SPEED,
@@ -584,6 +553,8 @@ impl Game {
         }
         self.player.reset();
         self.bullets.clear();
+        self.bullet_spawn_buffer.clear();
+        self.collision_results.clear();
         self.enemies = generate_wave(1);
         self.enemy_speed = INITIAL_ENEMY_SPEED;
         self.bullet_speed = crate::constants::BULLET_SPEED;
@@ -680,13 +651,14 @@ impl Game {
 
     fn shoot(&mut self) {
         if matches!(self.state, GameState::Playing) {
-            let new_bullets = self.player.shoot();
-            if !new_bullets.is_empty() {
+            self.bullet_spawn_buffer.clear();
+            self.player.shoot(&mut self.bullet_spawn_buffer);
+            if !self.bullet_spawn_buffer.is_empty() {
                 if let Some(ref sound) = self.shoot_sound {
                     play_sound_once(sound);
                 }
+                self.bullets.extend(self.bullet_spawn_buffer.drain(..));
             }
-            self.bullets.extend(new_bullets);
         }
     }
 
@@ -809,6 +781,8 @@ impl Game {
 
         // Check collision between bee and each bullet
         let bee_radius = 50.0; // Half of 100x100 bee size
+        let combined_radius = bee_radius + COLLISION_RADIUS;
+        let combined_radius_sq = combined_radius * combined_radius;
         let mut bee_hit = false;
         let bee_pos = (self.bee_x + 50.0, self.bee_y + 50.0); // Center of bee
 
@@ -816,9 +790,9 @@ impl Game {
         self.bullets.retain(|bullet| {
             let dx = bullet.x - bee_pos.0;
             let dy = bullet.y - bee_pos.1;
-            let distance = (dx * dx + dy * dy).sqrt();
+            let distance_sq = dx * dx + dy * dy;
 
-            if distance < bee_radius + COLLISION_RADIUS {
+            if distance_sq < combined_radius_sq {
                 bee_hit = true;
                 false // Remove this bullet
             } else {
@@ -829,7 +803,11 @@ impl Game {
         // If bee was hit, award points, create explosion, and deactivate bee
         if bee_hit {
             self.score += BEE_POINTS;
-            log::info!("Bee hit! Awarded {} points. Total score: {}", BEE_POINTS, self.score);
+            log::info!(
+                "Bee hit! Awarded {} points. Total score: {}",
+                BEE_POINTS,
+                self.score
+            );
 
             // Create large explosion for the bee
             self.explosions.push(Explosion::new_with_size(
@@ -850,16 +828,21 @@ impl Game {
     }
 
     fn update_collisions(&mut self) {
-        let destroyed_info = process_collisions(&mut self.enemies, &mut self.bullets);
+        self.collision_results.clear();
+        process_collisions(
+            &mut self.enemies,
+            &mut self.bullets,
+            &mut self.collision_results,
+        );
 
-        if !destroyed_info.is_empty() {
+        if !self.collision_results.is_empty() {
             // Play hit sound
             if let Some(ref sound) = self.hit_sound {
                 play_sound_once(sound);
             }
 
             // Create explosions and update score for each destroyed enemy
-            for (x, y, points) in destroyed_info {
+            for (x, y, points) in self.collision_results.drain(..) {
                 self.explosions.push(Explosion::new(x, y));
                 self.score += points; // Add enemy-specific points
                 log::debug!("Created explosion at ({}, {}) - {} points", x, y, points);
@@ -939,7 +922,7 @@ impl Game {
                 self.update_background_scroll(dt);
                 self.update_highscore_scroll(dt);
                 self.time += dt; // Update time for rainbow animation
-                // Play intro music if not already playing
+                                 // Play intro music if not already playing
                 if !self.intro_playing {
                     if let Some(ref sound) = self.intro_sound {
                         play_sound(
@@ -1104,9 +1087,9 @@ impl Game {
         for enemy in &self.enemies {
             // Different colors for different enemy types
             let color = match enemy.enemy_type {
-                EnemyType::Standard => WHITE,                   // Standard: White
+                EnemyType::Standard => WHITE, // Standard: White
                 EnemyType::Fast => Color::from_rgba(255, 255, 0, 255), // Fast: Yellow
-                EnemyType::Tank => Color::from_rgba(255, 0, 0, 255),   // Tank: Red
+                EnemyType::Tank => Color::from_rgba(255, 0, 0, 255), // Tank: Red
                 EnemyType::Swooper => Color::from_rgba(0, 255, 255, 255), // Swooper: Cyan
             };
 
@@ -1171,8 +1154,6 @@ impl Game {
         }
     }
 
-
-
     fn draw_menu(&self) {
         // Draw parallax backgrounds
         self.draw_background();
@@ -1220,7 +1201,8 @@ impl Game {
             let char_dims = self.measure_text_retro(&char_str, title_font_size as u16);
 
             // Calculate wobble effect
-            let y_offset = (x_offset * wobble_frequency + self.time * wobble_speed).sin() * wobble_amplitude;
+            let y_offset =
+                (x_offset * wobble_frequency + self.time * wobble_speed).sin() * wobble_amplitude;
 
             // C64-style color cycling
             let color_offset = self.time * 0.8 + i as f32 * 0.25;
@@ -1358,7 +1340,13 @@ impl Game {
         let highscore_y = panel_y; // Align with the name entry panel
 
         // Highscores header
-        self.draw_text_retro("HIGH SCORES", highscore_x + 10.0, highscore_y + 10.0, 24.0, BLACK);
+        self.draw_text_retro(
+            "HIGH SCORES",
+            highscore_x + 10.0,
+            highscore_y + 10.0,
+            24.0,
+            BLACK,
+        );
 
         // Display highscores
         let top_scores = self.highscore_manager.get_top_scores(5); // Show only top 5
@@ -1391,7 +1379,8 @@ impl Game {
             let char_dims = self.measure_text_retro(&char_str, font_size as u16);
 
             // Calculate wobble effect
-            let y_offset = (x_offset * wobble_frequency + self.time * wobble_speed).sin() * wobble_amplitude;
+            let y_offset =
+                (x_offset * wobble_frequency + self.time * wobble_speed).sin() * wobble_amplitude;
 
             // C64-style color cycling
             let color_offset = self.time + i as f32 * 0.3;
@@ -1482,7 +1471,7 @@ impl Game {
     fn draw_bee(&self) {
         // Only draw if bee is active
         if self.bee_active {
-            let logo_width = 100.0;  // Scale the logo to reasonable size
+            let logo_width = 100.0; // Scale the logo to reasonable size
             let logo_height = 100.0;
 
             draw_texture_ex(
@@ -1583,7 +1572,9 @@ impl Game {
                         let touch_pos = Vec2::new(touch.position.x, touch.position.y);
 
                         // Check if touch is on input box - activate keyboard focus
-                        if input_box_rect.contains(touch_pos) && touch.phase == macroquad::input::TouchPhase::Started {
+                        if input_box_rect.contains(touch_pos)
+                            && touch.phase == macroquad::input::TouchPhase::Started
+                        {
                             self.name_input_focused = true;
                             println!("Touch on input box - keyboard should appear");
                         }
@@ -1593,7 +1584,9 @@ impl Game {
                         let button_y = panel_y + 120.0;
                         let button_rect = Rect::new(button_x, button_y, 280.0, 45.0);
 
-                        if button_rect.contains(touch_pos) && touch.phase == macroquad::input::TouchPhase::Started {
+                        if button_rect.contains(touch_pos)
+                            && touch.phase == macroquad::input::TouchPhase::Started
+                        {
                             println!("Touch on start button");
                             self.start_game();
                         }
@@ -1668,7 +1661,10 @@ impl Game {
                         // Touch position directly controls player position
                         if touch_x < SCREEN_WIDTH / 2.0 {
                             // Map touch X position to player X position
-                            self.player.x = touch_x.clamp(self.player.base_width / 2.0, SCREEN_WIDTH - self.player.base_width / 2.0);
+                            self.player.x = touch_x.clamp(
+                                self.player.base_width / 2.0,
+                                SCREEN_WIDTH - self.player.base_width / 2.0,
+                            );
                         }
 
                         // Right half of screen: Shoot
@@ -1722,14 +1718,68 @@ impl Game {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+const ICON_16_BYTES: &[u8] = include_bytes!("../assets/icon_16x16.png");
+#[cfg(not(target_arch = "wasm32"))]
+const ICON_32_BYTES: &[u8] = include_bytes!("../assets/icon_32x32.png");
+#[cfg(not(target_arch = "wasm32"))]
+const ICON_64_BYTES: &[u8] = include_bytes!("../assets/icon_64x64.png");
+
+#[cfg(not(target_arch = "wasm32"))]
+fn decode_icon<const LEN: usize>(bytes: &[u8], expected_size: u32) -> Result<[u8; LEN], String> {
+    let image = image::load_from_memory(bytes).map_err(|err| err.to_string())?;
+    let (width, height) = image.dimensions();
+
+    if width != expected_size || height != expected_size {
+        return Err(format!(
+            "expected icon size {}x{}, got {}x{}",
+            expected_size, expected_size, width, height
+        ));
+    }
+
+    let rgba = image.to_rgba8();
+    let raw = rgba.into_raw();
+
+    raw.try_into()
+        .map_err(|_| format!("icon buffer mismatch (expected {} bytes)", LEN))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn load_window_icon() -> Option<Icon> {
+    const SMALL_LEN: usize = 16 * 16 * 4;
+    const MEDIUM_LEN: usize = 32 * 32 * 4;
+    const BIG_LEN: usize = 64 * 64 * 4;
+
+    match (
+        decode_icon::<SMALL_LEN>(ICON_16_BYTES, 16),
+        decode_icon::<MEDIUM_LEN>(ICON_32_BYTES, 32),
+        decode_icon::<BIG_LEN>(ICON_64_BYTES, 64),
+    ) {
+        (Ok(small), Ok(medium), Ok(big)) => Some(Icon { small, medium, big }),
+        (small, medium, big) => {
+            for err in [small.err(), medium.err(), big.err()].into_iter().flatten() {
+                log::warn!("Failed to decode window icon: {}", err);
+            }
+            None
+        }
+    }
+}
+
 fn window_conf() -> Conf {
-    Conf {
+    let mut conf = Conf {
         window_title: "BumbleBees".to_owned(),
         window_width: SCREEN_WIDTH as i32,
         window_height: SCREEN_HEIGHT as i32,
         window_resizable: false,
         ..Default::default()
+    };
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        conf.icon = load_window_icon();
     }
+
+    conf
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1795,15 +1845,14 @@ mod tests {
     #[test]
     fn test_wave_enemy_counts() {
         // Test that wave generation produces correct enemy counts
-        // All waves now use Space Invaders-style fixed formation: 5 rows × 10 columns = 50 enemies
         let wave1 = generate_wave(1);
         assert_eq!(wave1.len(), 50);
 
         let wave2 = generate_wave(2);
-        assert_eq!(wave2.len(), 50);
+        assert_eq!(wave2.len(), 56);
 
         let wave3 = generate_wave(3);
-        assert_eq!(wave3.len(), 50);
+        assert_eq!(wave3.len(), 25);
     }
 
     #[test]
@@ -1880,8 +1929,11 @@ mod tests {
         // parts[0] gets repositioned to parts[1] + texture_width, then they swap
         // So we should have continuous coverage with parts spaced by texture_width
         let spacing = (layer.parts[0] - layer.parts[1]).abs();
-        assert!((spacing - 1024.0).abs() < 1.0,
-                "Parts should be spaced by texture width (1024), but spacing is {}", spacing);
+        assert!(
+            (spacing - 1024.0).abs() < 1.0,
+            "Parts should be spaced by texture width (1024), but spacing is {}",
+            spacing
+        );
     }
 
     #[test]

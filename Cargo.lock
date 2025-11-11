@@ -520,6 +520,7 @@ name = "ten"
 version = "1.1.0"
 dependencies = [
  "getrandom",
+ "image",
  "log",
  "macroquad",
  "rand",

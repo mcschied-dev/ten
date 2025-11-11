@@ -2,6 +2,7 @@
 
 use crate::constants::SCREEN_WIDTH;
 use crate::entities::{Enemy, EnemyType};
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 
 /// Formation pattern types.
 #[derive(Debug, Clone, Copy)]
@@ -144,19 +145,14 @@ fn generate_scattered_formation(wave: u32) -> Vec<Enemy> {
     let mut enemies = Vec::new();
     let enemy_count = 35;
 
-    // Use wave as seed for pseudo-random positioning
-    let mut seed = wave as f32;
+    let mut rng = SmallRng::seed_from_u64(wave as u64);
+    let x_min = 100.0;
+    let x_max = SCREEN_WIDTH - 100.0;
 
     for i in 0..enemy_count {
-        // Pseudo-random position based on wave and index
-        seed = (seed * 9301.0 + 49297.0) % 233280.0;
-        let x = 100.0 + (seed / 233280.0) * (SCREEN_WIDTH - 200.0);
-
-        seed = (seed * 9301.0 + 49297.0) % 233280.0;
-        let y = 60.0 + (seed / 233280.0) * 200.0;
-
-        seed = (seed * 9301.0 + 49297.0) % 233280.0;
-        let direction = if seed > 116640.0 { 1.0 } else { -1.0 };
+        let x = rng.gen_range(x_min..x_max);
+        let y = rng.gen_range(60.0..260.0);
+        let direction = if rng.gen_bool(0.5) { 1.0 } else { -1.0 };
 
         // Mix of enemy types
         let enemy_type = match i % 7 {

@@ -4,6 +4,9 @@
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(not(target_arch = "wasm32"))]
+use std::cell::RefCell;
+
 /// Maximum size of localStorage data to prevent memory exhaustion (1MB)
 #[cfg(target_arch = "wasm32")]
 const MAX_LOCALSTORAGE_SIZE: usize = 1024 * 1024;
@@ -11,6 +14,9 @@ const MAX_LOCALSTORAGE_SIZE: usize = 1024 * 1024;
 /// Maximum number of highscore entries to prevent DoS attacks (1000 entries)
 #[cfg(target_arch = "wasm32")]
 const MAX_HIGHSCORE_ENTRIES: usize = 1000;
+
+/// Maximum number of highscores persisted on disk/browser storage.
+const MAX_SAVED_SCORES: usize = 50;
 
 /// A single highscore entry containing player name and score.
 ///
@@ -85,6 +91,8 @@ impl HighscoreEntry {
 pub struct HighscoreManager {
     /// Storage key: filename (desktop) or localStorage key (WASM)
     storage_key: String,
+    #[cfg(not(target_arch = "wasm32"))]
+    cache: RefCell<Option<Vec<HighscoreEntry>>>,
 }
 
 impl HighscoreManager {
@@ -103,6 +111,8 @@ impl HighscoreManager {
     pub fn new(key: &str) -> Self {
         Self {
             storage_key: key.to_string(),
+            #[cfg(not(target_arch = "wasm32"))]
+            cache: RefCell::new(None),
         }
     }
 
@@ -115,7 +125,7 @@ impl HighscoreManager {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.load_from_file()
+            self.load_cached_scores()
         }
     }
 
@@ -129,6 +139,7 @@ impl HighscoreManager {
 
         // Sort by score, highest first
         entries.sort_by(|a, b| b.score.cmp(&a.score));
+        entries.truncate(MAX_SAVED_SCORES);
 
         #[cfg(target_arch = "wasm32")]
         {
@@ -137,6 +148,7 @@ impl HighscoreManager {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
+            self.update_cache(&entries);
             self.save_to_file(&entries);
         }
     }
@@ -166,8 +178,24 @@ impl HighscoreManager {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.load_from_file()
+            self.load_cached_scores()
         }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn load_cached_scores(&self) -> Vec<HighscoreEntry> {
+        if let Some(cached) = self.cache.borrow().as_ref() {
+            return cached.clone();
+        }
+
+        let scores = self.load_from_file();
+        self.update_cache(&scores);
+        scores
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn update_cache(&self, entries: &[HighscoreEntry]) {
+        *self.cache.borrow_mut() = Some(entries.to_vec());
     }
 
     /// Get top N highscores
@@ -433,21 +461,19 @@ impl HighscoreManager {
         }
 
         match serde_json::to_string(entries) {
-            Ok(json_str) => {
-                unsafe {
-                    let key = match CString::new(self.storage_key.as_str()) {
-                        Ok(k) => k,
-                        Err(_) => return,
-                    };
+            Ok(json_str) => unsafe {
+                let key = match CString::new(self.storage_key.as_str()) {
+                    Ok(k) => k,
+                    Err(_) => return,
+                };
 
-                    let value = match CString::new(json_str.as_str()) {
-                        Ok(v) => v,
-                        Err(_) => return,
-                    };
+                let value = match CString::new(json_str.as_str()) {
+                    Ok(v) => v,
+                    Err(_) => return,
+                };
 
-                    js_localstorage_set(key.as_ptr(), value.as_ptr());
-                }
-            }
+                js_localstorage_set(key.as_ptr(), value.as_ptr());
+            },
             Err(_) => {}
         }
     }

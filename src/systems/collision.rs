@@ -3,6 +3,8 @@
 use crate::constants::COLLISION_RADIUS;
 use crate::entities::{Bullet, Enemy};
 
+const COLLISION_RADIUS_SQ: f32 = COLLISION_RADIUS * COLLISION_RADIUS;
+
 /// Check if a bullet collides with an enemy using circle collision.
 ///
 /// # Arguments
@@ -17,7 +19,7 @@ use crate::entities::{Bullet, Enemy};
 pub fn check_collision(bullet: &Bullet, enemy: &Enemy) -> bool {
     let dx = enemy.x - bullet.x;
     let dy = enemy.y - bullet.y;
-    (dx * dx + dy * dy).sqrt() < COLLISION_RADIUS
+    dx * dx + dy * dy < COLLISION_RADIUS_SQ
 }
 
 /// Process collisions between bullets and enemies.
@@ -30,66 +32,57 @@ pub fn check_collision(bullet: &Bullet, enemy: &Enemy) -> bool {
 /// * `enemies` - Mutable vector of enemies to check
 /// * `bullets` - Mutable vector of bullets to check against
 ///
-/// # Returns
+/// # Arguments
 ///
-/// A vector of (x, y, points) tuples for destroyed enemies (for explosions and score)
+/// * `destroyed_info` - Scratch buffer that will be filled with (x, y, points)
 pub fn process_collisions(
     enemies: &mut Vec<Enemy>,
     bullets: &mut Vec<Bullet>,
-) -> Vec<(f32, f32, u32)> {
-    let mut destroyed_info = Vec::new();
-    let mut bullets_to_remove = Vec::new();
+    destroyed_info: &mut Vec<(f32, f32, u32)>,
+) {
+    destroyed_info.clear();
+    let initial_enemy_count = enemies.len();
+    let initial_bullet_count = bullets.len();
 
-    // Process each enemy for collisions
-    let mut i = 0;
-    while i < enemies.len() {
-        let mut hit = false;
+    let mut bullet_idx = 0;
+    while bullet_idx < bullets.len() {
+        let mut bullet_hit = false;
 
-        // Check if any bullet hits this enemy
-        for (bullet_idx, bullet) in bullets.iter().enumerate() {
-            if check_collision(bullet, &enemies[i]) {
-                // Damage the enemy
-                let destroyed = enemies[i].take_damage();
-                bullets_to_remove.push(bullet_idx);
-                hit = true;
+        for enemy in enemies.iter_mut() {
+            if enemy.is_destroyed() {
+                continue;
+            }
 
-                // If enemy is destroyed, store info for explosion and score
+            if check_collision(&bullets[bullet_idx], enemy) {
+                let destroyed = enemy.take_damage();
+                bullet_hit = true;
+
                 if destroyed {
-                    destroyed_info.push((
-                        enemies[i].x,
-                        enemies[i].y,
-                        enemies[i].enemy_type.points(),
-                    ));
+                    destroyed_info.push((enemy.x, enemy.y, enemy.enemy_type.points()));
                 }
-
-                break; // One bullet per enemy per frame
+                break;
             }
         }
 
-        // Remove enemy if destroyed
-        if hit && enemies[i].is_destroyed() {
-            enemies.remove(i);
+        if bullet_hit {
+            bullets.swap_remove(bullet_idx);
         } else {
-            i += 1;
+            bullet_idx += 1;
         }
     }
 
-    // Remove bullets that hit enemies (in reverse order to maintain indices)
-    bullets_to_remove.sort_unstable();
-    bullets_to_remove.dedup();
-    for &idx in bullets_to_remove.iter().rev() {
-        bullets.remove(idx);
-    }
+    enemies.retain(|enemy| !enemy.is_destroyed());
 
-    if !destroyed_info.is_empty() {
+    let removed_enemies = initial_enemy_count - enemies.len();
+    let removed_bullets = initial_bullet_count - bullets.len();
+
+    if removed_enemies > 0 || removed_bullets > 0 {
         log::debug!(
             "Destroyed {} enemies and removed {} bullets in collision check",
-            destroyed_info.len(),
-            bullets_to_remove.len()
+            removed_enemies,
+            removed_bullets
         );
     }
-
-    destroyed_info
 }
 
 #[cfg(test)]
@@ -122,8 +115,9 @@ mod tests {
         let mut bullets = vec![
             Bullet::new(105.0, 205.0), // Should hit first enemy
         ];
+        let mut destroyed_info = Vec::new();
 
-        let destroyed_info = process_collisions(&mut enemies, &mut bullets);
+        process_collisions(&mut enemies, &mut bullets, &mut destroyed_info);
         assert_eq!(destroyed_info.len(), 1);
         assert_eq!(enemies.len(), 2);
         assert_eq!(bullets.len(), 0); // Bullet should be removed
@@ -137,8 +131,9 @@ mod tests {
             Bullet::new(95.0, 195.0),  // Should hit
             Bullet::new(105.0, 205.0), // Would also hit, but enemy removed by first bullet
         ];
+        let mut destroyed_info = Vec::new();
 
-        let destroyed_info = process_collisions(&mut enemies, &mut bullets);
+        process_collisions(&mut enemies, &mut bullets, &mut destroyed_info);
         assert_eq!(destroyed_info.len(), 1); // Only one enemy destroyed
         assert_eq!(enemies.len(), 0);
         assert_eq!(bullets.len(), 1); // Only one bullet removed (first hit)
@@ -150,9 +145,10 @@ mod tests {
         let mut bullets = vec![
             Bullet::new(105.0, 205.0), // First hit
         ];
+        let mut destroyed_info = Vec::new();
 
         // First hit - Tank takes damage but survives (3 -> 2 health)
-        let destroyed_info = process_collisions(&mut enemies, &mut bullets);
+        process_collisions(&mut enemies, &mut bullets, &mut destroyed_info);
         assert_eq!(destroyed_info.len(), 0); // Not destroyed yet
         assert_eq!(enemies.len(), 1); // Still alive
         assert_eq!(enemies[0].health, 2); // Health reduced
@@ -160,13 +156,13 @@ mod tests {
 
         // Second hit
         bullets.push(Bullet::new(105.0, 205.0));
-        let destroyed_info = process_collisions(&mut enemies, &mut bullets);
+        process_collisions(&mut enemies, &mut bullets, &mut destroyed_info);
         assert_eq!(destroyed_info.len(), 0); // Still not destroyed
         assert_eq!(enemies[0].health, 1); // Health reduced again
 
         // Third hit - Tank destroyed
         bullets.push(Bullet::new(105.0, 205.0));
-        let destroyed_info = process_collisions(&mut enemies, &mut bullets);
+        process_collisions(&mut enemies, &mut bullets, &mut destroyed_info);
         assert_eq!(destroyed_info.len(), 1); // Now destroyed!
         assert_eq!(enemies.len(), 0);
         assert_eq!(destroyed_info[0].2, 50); // Tank worth 50 points
@@ -176,8 +172,9 @@ mod tests {
     fn test_no_collisions() {
         let mut enemies = vec![Enemy::new(100.0, 200.0, 1.0, EnemyType::Standard)];
         let mut bullets = vec![Bullet::new(200.0, 300.0)]; // Far away
+        let mut destroyed_info = Vec::new();
 
-        let destroyed_info = process_collisions(&mut enemies, &mut bullets);
+        process_collisions(&mut enemies, &mut bullets, &mut destroyed_info);
         assert_eq!(destroyed_info.len(), 0);
         assert_eq!(enemies.len(), 1);
         assert_eq!(bullets.len(), 1); // Bullet should remain
@@ -187,8 +184,9 @@ mod tests {
     fn test_empty_inputs() {
         let mut enemies: Vec<Enemy> = vec![];
         let mut bullets: Vec<Bullet> = vec![];
+        let mut destroyed_info = Vec::new();
 
-        let destroyed_info = process_collisions(&mut enemies, &mut bullets);
+        process_collisions(&mut enemies, &mut bullets, &mut destroyed_info);
         assert_eq!(destroyed_info.len(), 0);
         assert_eq!(enemies.len(), 0);
         assert_eq!(bullets.len(), 0);
@@ -207,7 +205,8 @@ mod tests {
             Bullet::new(305.0, 205.0),
         ];
 
-        let destroyed_info = process_collisions(&mut enemies, &mut bullets);
+        let mut destroyed_info = Vec::new();
+        process_collisions(&mut enemies, &mut bullets, &mut destroyed_info);
         assert_eq!(destroyed_info.len(), 3);
 
         // Check points are correct
