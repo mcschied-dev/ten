@@ -151,7 +151,7 @@ After completing each wave, you gain:
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd ten
+cd bumblebees
 
 # Run the game
 cargo run --release
@@ -260,7 +260,7 @@ your-webserver/
 ## 📁 Project Structure
 
 ```
-ten/
+bumblebees/
 ├── src/
 │   ├── main.rs          # Entry point and game loop
 │   ├── lib.rs           # Library exports
@@ -300,9 +300,7 @@ ten/
 │       └── fuzz_icon_decode.rs  # PNG decoder fuzzer
 ├── Cargo.toml           # Rust dependencies and metadata
 ├── CLAUDE.md            # Developer documentation
-├── AGENTS.md            # Build/lint/test commands reference
-├── index.html           # Web deployment HTML
-├── wasm-status.html     # WASM status page
+├── game.html            # Web deployment HTML
 └── README.md            # This file
 ```
 
@@ -434,7 +432,7 @@ Place your own assets in the `resources/` directory:
 - **Sprites**: `sprite_enemy.png` (40x40 PNG with transparency)
 - **VFX**: `vfx_explosion_01.png` through `vfx_explosion_03.png` (animation frames)
 - **UI**: `ui_font.png` (pixel font), `ui_logo.png` (game icon)
-- **Audio**: `sfx_*.wav` (sound effects), `music_*.wav` (background music) - WAV format only
+- **Audio**: `sfx_*.wav` (sound effects in WAV format), `intro.ogg` and `music_background.ogg` (music in OGG Vorbis format)
 
 ## 🐛 Troubleshooting
 
@@ -445,7 +443,7 @@ Place your own assets in the `resources/` directory:
 
 ### No sound
 - Verify audio files are in `resources/` directory
-- Ensure files are WAV format (not MP3 or other formats)
+- Ensure sound effects are in WAV format and music files are in OGG Vorbis format
 - Check system audio settings
 
 ### Low frame rate
@@ -524,8 +522,7 @@ This project is available under the MIT License.
 - [CLAUDE.md](CLAUDE.md) - Comprehensive developer documentation
 - [Cargo.toml](Cargo.toml) - Rust dependencies and project metadata
 - `debug.log` - Detailed runtime logs for debugging
-- `index.html` - Web deployment entry point
-- `wasm-status.html` - WASM build status page
+- `game.html` - Web deployment entry point
 
 ---
 
