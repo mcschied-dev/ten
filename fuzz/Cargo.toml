@@ -1,0 +1,44 @@
+[package]
+name = "ten-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+rand = "0.8"
+image = "0.24"
+
+[dependencies.ten]
+path = ".."
+
+[[bin]]
+name = "fuzz_target_1"
+path = "fuzz_targets/fuzz_target_1.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_highscore"
+path = "fuzz_targets/fuzz_highscore.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_asset_paths"
+path = "fuzz_targets/fuzz_asset_paths.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_icon_decode"
+path = "fuzz_targets/fuzz_icon_decode.rs"
+test = false
+doc = false
+bench = false
