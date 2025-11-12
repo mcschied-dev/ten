@@ -2,7 +2,12 @@
 
 use crate::constants::SCREEN_WIDTH;
 use crate::entities::{Enemy, EnemyType};
+
+#[cfg(not(target_arch = "wasm32"))]
 use rand::{rngs::SmallRng, Rng, SeedableRng};
+
+#[cfg(target_arch = "wasm32")]
+use macroquad::rand::gen_range;
 
 /// Formation pattern types.
 #[derive(Debug, Clone, Copy)]
@@ -140,7 +145,8 @@ fn generate_diamond_formation(wave: u32) -> Vec<Enemy> {
     enemies
 }
 
-/// Generate a scattered formation.
+/// Generate a scattered formation (Desktop version with seeded RNG).
+#[cfg(not(target_arch = "wasm32"))]
 fn generate_scattered_formation(wave: u32) -> Vec<Enemy> {
     let mut enemies = Vec::new();
     let enemy_count = 35;
@@ -153,6 +159,34 @@ fn generate_scattered_formation(wave: u32) -> Vec<Enemy> {
         let x = rng.gen_range(x_min..x_max);
         let y = rng.gen_range(60.0..260.0);
         let direction = if rng.gen_bool(0.5) { 1.0 } else { -1.0 };
+
+        // Mix of enemy types
+        let enemy_type = match i % 7 {
+            0 if wave >= 2 => EnemyType::Fast,
+            1 | 2 if wave >= 3 => EnemyType::Tank,
+            3 if wave >= 4 => EnemyType::Swooper,
+            _ => EnemyType::Standard,
+        };
+
+        enemies.push(Enemy::new(x, y, direction, enemy_type));
+    }
+
+    enemies
+}
+
+/// Generate a scattered formation (WASM version using macroquad rand).
+#[cfg(target_arch = "wasm32")]
+fn generate_scattered_formation(wave: u32) -> Vec<Enemy> {
+    let mut enemies = Vec::new();
+    let enemy_count = 35;
+
+    let x_min = 100.0;
+    let x_max = SCREEN_WIDTH - 100.0;
+
+    for i in 0..enemy_count {
+        let x = gen_range(x_min, x_max);
+        let y = gen_range(60.0, 260.0);
+        let direction = if gen_range(0.0, 1.0) < 0.5 { 1.0 } else { -1.0 };
 
         // Mix of enemy types
         let enemy_type = match i % 7 {

@@ -419,6 +419,9 @@ struct Game {
 
 impl Game {
     async fn new() -> Self {
+        #[cfg(target_arch = "wasm32")]
+        println!("Game::new() - Starting resource load");
+
         log::info!("Loading game resources");
 
         // ========================================================================
@@ -463,12 +466,20 @@ impl Game {
                 Texture2D::from_rgba8(1024, 575, &[34, 139, 34, 255])
             }); // Forest green fallback
 
+        #[cfg(target_arch = "wasm32")]
+        println!("Loading bg_main.png...");
+
         let near_field = load_texture_fallback("resources/bg_main.png")
             .await
             .unwrap_or_else(|_| {
                 log::warn!("Failed to load near_field texture, using fallback");
+                #[cfg(target_arch = "wasm32")]
+                println!("WARNING: Failed to load bg_main.png");
                 Texture2D::from_rgba8(1024, 575, &[0, 100, 0, 255])
             }); // Dark green fallback
+
+        #[cfg(target_arch = "wasm32")]
+        println!("Loaded bg_main.png successfully");
 
         let layer_4 = load_texture_fallback("resources/bg_layer_04.png")
             .await
@@ -550,23 +561,21 @@ impl Game {
             log::warn!("Failed to load Retro Gaming font, using default font");
         }
 
-        // Skip loading large audio files on WASM to reduce initial load time
-        // Background music and intro sound are 33MB and 20MB respectively
-        #[cfg(not(target_arch = "wasm32"))]
-        let intro_sound = load_sound_fallback("resources/intro.wav").await.ok();
         #[cfg(target_arch = "wasm32")]
-        let intro_sound = None;
+        println!("Loading audio files...");
+
+        let intro_sound = load_sound_fallback("resources/intro.wav").await.ok();
 
         let shoot_sound = load_sound_fallback("resources/sfx_shoot.wav").await.ok();
 
         let hit_sound = load_sound_fallback("resources/sfx_hit.wav").await.ok();
 
-        #[cfg(not(target_arch = "wasm32"))]
         let background_music = load_sound_fallback("resources/music_background.wav")
             .await
             .ok();
+
         #[cfg(target_arch = "wasm32")]
-        let background_music = None;
+        println!("All audio loaded");
 
         let bee_sound = load_sound_fallback("resources/sfx_bumblebee.wav")
             .await
@@ -587,6 +596,9 @@ impl Game {
         ];
 
         log::info!("Game state created successfully");
+
+        #[cfg(target_arch = "wasm32")]
+        println!("Game::new() - All resources loaded, creating game state");
 
         Self {
             player: Player::new(),
@@ -1955,20 +1967,29 @@ fn load_window_icon() -> Option<Icon> {
 }
 
 fn window_conf() -> Conf {
-    let mut conf = Conf {
-        window_title: "BumbleBees".to_owned(),
-        window_width: SCREEN_WIDTH as i32,
-        window_height: SCREEN_HEIGHT as i32,
-        window_resizable: false,
-        ..Default::default()
-    };
-
     #[cfg(not(target_arch = "wasm32"))]
     {
+        let mut conf = Conf {
+            window_title: "BumbleBees".to_owned(),
+            window_width: SCREEN_WIDTH as i32,
+            window_height: SCREEN_HEIGHT as i32,
+            window_resizable: false,
+            ..Default::default()
+        };
         conf.icon = load_window_icon();
+        conf
     }
 
-    conf
+    #[cfg(target_arch = "wasm32")]
+    {
+        Conf {
+            window_title: "BumbleBees".to_owned(),
+            window_width: SCREEN_WIDTH as i32,
+            window_height: SCREEN_HEIGHT as i32,
+            window_resizable: false,
+            ..Default::default()
+        }
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1996,8 +2017,11 @@ async fn main() {
     // WASM version
     // Note: macroquad provides its own logging to console
     println!("Starting BumbleBees game (WASM)");
+    println!("Initializing game...");
 
     let mut game = Game::new().await;
+
+    println!("Game initialized successfully!");
 
     loop {
         let dt = get_frame_time();
