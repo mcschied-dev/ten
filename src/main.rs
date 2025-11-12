@@ -6,6 +6,23 @@ use macroquad::audio::{
 };
 use macroquad::prelude::*;
 
+#[cfg(target_arch = "wasm32")]
+extern "C" {
+    fn update_loading_progress(msg_ptr: *const u8, msg_len: usize);
+}
+
+#[cfg(target_arch = "wasm32")]
+fn update_progress(message: &str) {
+    unsafe {
+        update_loading_progress(message.as_ptr(), message.len());
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn update_progress(_message: &str) {
+    // No-op for desktop
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 use image::GenericImageView;
 #[cfg(not(target_arch = "wasm32"))]
@@ -424,6 +441,9 @@ impl Game {
 
         log::info!("Loading game resources");
 
+        #[cfg(target_arch = "wasm32")]
+        update_progress("Loading background textures...");
+
         // ========================================================================
         // RESOURCE NAMING CONVENTION
         // ========================================================================
@@ -516,6 +536,9 @@ impl Game {
                 Texture2D::from_rgba8(1024, 575, &[150, 150, 150, 255])
             });
 
+        #[cfg(target_arch = "wasm32")]
+        update_progress("Loading UI and game textures...");
+
         let intro_icon = load_texture_fallback("resources/ui_logo.png")
             .await
             .unwrap_or_else(|_| {
@@ -552,6 +575,9 @@ impl Game {
                 Texture2D::from_rgba8(40, 40, &[255, 200, 100, 255])
             }); // Yellow fallback
 
+        #[cfg(target_arch = "wasm32")]
+        update_progress("Loading fonts...");
+
         // Load TTF font for retro gaming style
         let retro_font = load_font_fallback("resources/font_retro_gaming.ttf").await;
 
@@ -560,6 +586,9 @@ impl Game {
         } else {
             log::warn!("Failed to load Retro Gaming font, using default font");
         }
+
+        #[cfg(target_arch = "wasm32")]
+        update_progress("Loading audio files...");
 
         #[cfg(target_arch = "wasm32")]
         println!("Loading audio files...");
@@ -581,6 +610,9 @@ impl Game {
             .await
             .ok();
 
+        #[cfg(target_arch = "wasm32")]
+        update_progress("Initializing game systems...");
+
         // Initialize background layers for parallax scrolling (9 layers: 8 numbered + main bg)
         // Layers are ordered from back to front for proper rendering depth
         let background_layers = vec![
@@ -594,6 +626,9 @@ impl Game {
             BackgroundLayer::new(-400.0, layer_6.width(), BackgroundLayerType::Layer6), // Very fast layer 6
             BackgroundLayer::new(-500.0, layer_7.width(), BackgroundLayerType::Layer7), // Fastest layer 7
         ];
+
+        #[cfg(target_arch = "wasm32")]
+        update_progress("Creating game state...");
 
         log::info!("Game state created successfully");
 
@@ -2015,13 +2050,12 @@ async fn main() {
 #[macroquad::main(window_conf)]
 async fn main() {
     // WASM version
-    // Note: macroquad provides its own logging to console
-    println!("Starting BumbleBees game (WASM)");
-    println!("Initializing game...");
+    update_progress("Starting BumbleBees game (WASM)");
+    update_progress("Initializing game...");
 
     let mut game = Game::new().await;
 
-    println!("Game initialized successfully!");
+    update_progress("Game initialized successfully!");
 
     loop {
         let dt = get_frame_time();

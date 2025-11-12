@@ -211,18 +211,14 @@
             }
         }
 
-        // Intercept console.log to track loading progress
-        const originalConsoleLog = console.log;
-        console.log = function(...args) {
-            const message = args.join(' ');
+        // Global function that WASM can call directly
+        window.update_loading_progress = function(msg_ptr, msg_len) {
+            // Read string from WASM memory
+            const bytes = new Uint8Array(wasm_memory.buffer, msg_ptr, msg_len);
+            const message = new TextDecoder().decode(bytes);
 
-            // Check if this is a loading progress message
-            if (loadingSteps[message] !== undefined) {
-                updateLoadingProgress(message);
-            }
-
-            // Call original console.log
-            originalConsoleLog.apply(console, args);
+            console.log("Loading progress:", message);
+            updateLoadingProgress(message);
         };
     </script>
     <script>
@@ -412,6 +408,7 @@
                 importObject.env.js_localstorage_get = window.js_localstorage_get;
                 importObject.env.js_localstorage_set = window.js_localstorage_set;
                 importObject.env.js_free_string = window.js_free_string;
+                importObject.env.update_loading_progress = window.update_loading_progress;
             },
 
             on_init: function() {
