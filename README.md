@@ -7,6 +7,8 @@ A retro-styled Space Invaders arcade shooter built in Rust with macroquad. Featu
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Game Engine](https://img.shields.io/badge/engine-macroquad%200.4-blue)
 
+![Screenshot](https://www.marcschieder.de/game/resources/screenshot.png)
+
 ## ✨ Features
 
 ### 🎮 Core Gameplay
